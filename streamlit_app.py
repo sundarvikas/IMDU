@@ -497,6 +497,24 @@ if "json_data" in st.session_state:
                                     st.info(message)  # was st.error
 
 # -----------------------------
+# SESSION STATE INITIALIZATION
+# -----------------------------
+if "json_data" not in st.session_state:
+    st.session_state.json_data = None
+if "markdown_text" not in st.session_state:
+    st.session_state.markdown_text = None
+if "filename" not in st.session_state:
+    st.session_state.filename = None
+if "ai_summary" not in st.session_state:
+    st.session_state.ai_summary = None
+if "json_tables" not in st.session_state:
+    st.session_state.json_tables = []
+if "document_history" not in st.session_state:
+    st.session_state.document_history = {}
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+# -----------------------------
 # SIDEBAR: Document History
 # -----------------------------
 if "document_history" in st.session_state and st.session_state.document_history:
