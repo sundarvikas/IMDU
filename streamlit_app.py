@@ -22,20 +22,29 @@ st.set_page_config(
 )
 
 # -----------------------------
-# CUSTOM CSS
+# CUSTOM CSS (Dark Mode Friendly)
 # -----------------------------
 st.markdown("""
 <style>
+    /* General */
     .main .block-container { padding-top: 1rem; }
+
+    /* Button styling */
     .stButton button {
         border-radius: 8px;
         height: 3rem;
         font-weight: 600;
+        transition: all 0.2s;
     }
+    .stButton button:hover {
+        transform: scale(1.02);
+    }
+
+    /* Scrollable boxes */
     .scroll-box {
         max-height: 700px;
         overflow-y: auto;
-        border: 1px solid #e0e0e0;
+        border: 1px solid #ddd;
         border-radius: 12px;
         padding: 16px;
         background-color: #f8f9fa;
@@ -43,33 +52,98 @@ st.markdown("""
         line-height: 1.6;
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
+    @media (prefers-color-scheme: dark) {
+        .scroll-box {
+            background-color: #2d2d2d;
+            color: #ddd;
+            border-color: #444;
+        }
+    }
+
+    /* Markdown output */
     .markdown-body {
         line-height: 1.8;
         font-size: 1.1em;
         color: #222;
     }
-    .upload-area {
-        border: 2px dashed #4CAF50;
-        border-radius: 12px;
-        padding: 2rem;
+    @media (prefers-color-scheme: dark) {
+        .markdown-body {
+            color: #eee;
+        }
+    }
+
+    /* Upload Area - Modern & Theme-Aware */
+    .upload-instruction {
+        font-size: 1.2rem;
+        color: #555;
+        margin-bottom: 0.5rem;
+    }
+    .upload-note {
+        font-size: 0.95rem;
+        color: #777;
+    }
+    .upload-area-modern {
+        border: 2px dashed var(--primary-color, #1f77b4);
+        border-radius: 16px;
+        padding: 3rem 1.5rem;
         text-align: center;
-        background-color: #f1f8e9;
+        background-color: var(--background-color-upload, #f8f9fa);
+        color: var(--text-color-upload, #333);
+        transition: all 0.2s ease;
+        cursor: pointer;
         margin-bottom: 1.5rem;
     }
+    .upload-area-modern:hover {
+        background-color: var(--background-color-upload-hover, #e9ecef);
+        border-color: var(--primary-color, #1f77b4);
+        transform: translateY(-2px);
+    }
+    .upload-icon {
+        font-size: 3rem;
+        margin-bottom: 0.5rem;
+        color: var(--primary-color, #1f77b4);
+    }
+    @media (prefers-color-scheme: dark) {
+        .upload-area-modern {
+            background-color: #2d2d2d;
+            color: #ddd;
+            border-color: #555;
+        }
+        .upload-note, .upload-instruction {
+            color: #bbb;
+        }
+        .scroll-box, .stJson, .stDownloadButton, .stMetric {
+            color: #ddd !important;
+        }
+    }
+
+    /* Result Header */
     .result-header {
         font-size: 1.5rem;
         font-weight: 600;
-        color: #1f77b4;
+        color: var(--primary-color, #1f77b4);
         margin-bottom: 1rem;
     }
+
+    /* Footer */
     .footer {
         font-size: 0.9rem;
         color: #777;
         text-align: center;
         margin-top: 3rem;
     }
+    @media (prefers-color-scheme: dark) {
+        .footer {
+            color: #aaa;
+        }
+    }
+
+    /* Hide default uploader filename */
     [data-testid="stFileUploader"] {
         padding: 0;
+    }
+    .uploadedFileName > span {
+        display: none;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -89,7 +163,7 @@ def get_summary_stats(json_data):
         pages = json_data.get("document", {}).get("pages", [])
         for page in pages:
             for block in page.get("blocks", []):
-                block_type = block.get("type", "unknown").title()  # Capitalize for display
+                block_type = block.get("type", "unknown").title()
                 type_counts[block_type] = type_counts.get(block_type, 0) + 1
     except Exception as e:
         st.warning(f"Error parsing JSON structure: {str(e)}")
@@ -111,6 +185,15 @@ Upload a PDF, image, or Word document to extract structured content.
 # -----------------------------
 # FILE UPLOADER & PREVIEW
 # -----------------------------
+# Custom upload area with theme support
+st.markdown("""
+<div class="upload-area-modern">
+    <div class="upload-icon">📁</div>
+    <div class="upload-instruction">Drag & drop your document here</div>
+    <div class="upload-note">Supports: PDF, PNG, JPG, DOCX</div>
+</div>
+""", unsafe_allow_html=True)
+
 uploaded_file = st.file_uploader(
     "Upload your document",
     type=["pdf", "png", "jpg", "jpeg", "docx"],
@@ -118,10 +201,7 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is None:
-    st.markdown('<div class="upload-area">', unsafe_allow_html=True)
-    st.markdown("📁 Drag & drop a PDF, image, or DOCX file here")
-    st.markdown("Supported: PDF, PNG, JPG, DOCX")
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.info("📤 Upload a file to get started.")
 else:
     # Setup directories
     uploads_dir = Path("uploads")
@@ -150,8 +230,8 @@ else:
             pix = page.get_pixmap(dpi=96)
             img_bytes = pix.tobytes("png")
             st.image(img_bytes, caption="📄 PDF Page 1 Preview", use_column_width=True)
-        except Exception:
-            st.info("Preview not available for this PDF.")
+        except Exception as e:
+            st.info(f"Preview not available for this PDF. Error: {str(e)}")
     elif uploaded_file.name.endswith(".docx"):
         st.info("📄 Word document uploaded. Preview not available.")
 
@@ -205,11 +285,11 @@ if "json_data" in st.session_state:
             st.json(json_data)
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # 📊 Summary Stats using helper function
+        # 📊 Summary Stats
         st.markdown("##### 📊 Content Summary")
         stats = get_summary_stats(json_data)
 
-        # Display metrics in rows of up to 4
+        # Display metrics in rows of 4
         items = list(stats.items())
         for i in range(0, len(items), 4):
             cols = st.columns(4)
