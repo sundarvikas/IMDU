@@ -119,16 +119,14 @@ def json_to_markdown(data: Dict[Any, Any], md_path: Optional[str] = None) -> str
                 if not content:
                     continue
 
-                # Promote first section_header to main title if doc_title missing
+                # Promote first section_header to main title if no title exists yet
                 if btype == "doc_title":
-                    # Already added at top
+                    # Skip doc_title completely as per requirement
                     continue
                 elif btype == "section_header" and not first_section_added:
-                    # If no doc_title, promote first section to #
-                    if len(md_lines) <= 2:  # only title + newline
-                        md_lines[-2] = f"# {content.strip()}\n\n"  # replace title
-                    else:
-                        md_lines.append(f"## {content.strip()}\n\n")
+                    # Promote first section_header to # Main Title
+                    # Instead of unsafe md_lines[-2], just insert at top
+                    md_lines.insert(0, f"# {content.strip()}\n\n")
                     first_section_added = True
                 else:
                     md_lines.append(block_to_md(block))
