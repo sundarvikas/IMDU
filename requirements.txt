@@ -7,3 +7,12 @@ pillow
 camelot-py[cv]
 pandas 
 openpyxl
+os
+resend
+base64
+pathlib
+typing
+json
+datetime
+pandas
+tempfile
