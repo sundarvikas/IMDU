@@ -3,6 +3,19 @@ import streamlit as st
 from pathlib import Path
 import json
 from datetime import datetime
+import google.generativeai as genai
+
+# -----------------------------
+# GEMINI SETUP - Direct API Key
+# -----------------------------
+# ⚠️ WARNING: Only for demo/hackathon use. Never expose API keys in production.
+GEMINI_API_KEY = "AIzaSyDqoS0L2DJ2IaKmJdC-BopHUDK-srerWzo"  # Directly embedded
+
+try:
+    genai.configure(api_key=GEMINI_API_KEY)
+except Exception as e:
+    st.error(f"❌ Failed to configure Gemini: {str(e)}")
+    st.stop()
 
 # Import your pipeline
 try:
@@ -172,6 +185,16 @@ def get_summary_stats(json_data):
 
 
 # -----------------------------
+# SESSION STATE INITIALIZATION
+# -----------------------------
+if "document_history" not in st.session_state:
+    st.session_state.document_history = {}  # {stem: {json, markdown, timestamp, translated}}
+
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+
+# -----------------------------
 # HEADER
 # -----------------------------
 st.markdown("<h1 style='text-align: center;'>📄 INTELLIGEN MULTI-LINGUAL DOCUMENT UNDERSTANDING</h1>", unsafe_allow_html=True)
@@ -185,7 +208,6 @@ Upload a PDF, image, or Word document to extract structured content.
 # -----------------------------
 # FILE UPLOADER & PREVIEW
 # -----------------------------
-# Custom upload area with theme support
 st.markdown("""
 <div class="upload-area-modern">
     <div class="upload-icon">📁</div>
@@ -252,10 +274,18 @@ else:
                 st.session_state.filename = stem
                 st.session_state.processed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+                # Add to history
+                st.session_state.document_history[stem] = {
+                    "json_data": json_data,
+                    "markdown_text": markdown_text,
+                    "timestamp": st.session_state.processed_at,
+                    "translated": {}
+                }
+
                 st.toast("✅ Parsing complete!", icon="🎉")
             except Exception as e:
                 st.error(f"❌ Processing failed: {str(e)}")
-                st.exception(e)  # Optional: show full error (remove in production)
+                st.exception(e)
 
 
 # -----------------------------
@@ -269,7 +299,12 @@ if "json_data" in st.session_state:
     st.markdown("---")
     st.markdown(f"<div class='result-header'>Parsed Output</div>", unsafe_allow_html=True)
 
-    tab1, tab2, tab3 = st.tabs(["📑 Formatted Content", "📦 Structured Data", "⬇️ Export"])
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📑 Formatted Content",
+        "📦 Structured Data",
+        "⬇️ Export",
+        "💬 Chat with Document"
+    ])
 
     with tab1:
         st.markdown("### 📝 Extracted Document (Markdown)")
@@ -288,8 +323,6 @@ if "json_data" in st.session_state:
         # 📊 Summary Stats
         st.markdown("##### 📊 Content Summary")
         stats = get_summary_stats(json_data)
-
-        # Display metrics in rows of 4
         items = list(stats.items())
         for i in range(0, len(items), 4):
             cols = st.columns(4)
@@ -298,8 +331,6 @@ if "json_data" in st.session_state:
                 if idx < len(items):
                     label, value = items[idx]
                     cols[j].metric(label=label, value=value)
-
-        # Total elements
         total_elements = sum(stats.values())
         st.caption(f"📄 Total content blocks detected: {total_elements}")
 
@@ -311,20 +342,175 @@ if "json_data" in st.session_state:
         col1, col2 = st.columns(2)
         with col1:
             st.download_button(
-                label="⬇️ Download JSON",
-                data=json_str,
-                file_name=f"{filename}.json",
-                mime="application/json",
+                "⬇️ Download JSON",
+                json_str,
+                f"{filename}.json",
+                "application/json",
                 use_container_width=True
             )
         with col2:
             st.download_button(
-                label="⬇️ Download Markdown",
-                data=markdown_str,
-                file_name=f"{filename}.md",
-                mime="text/markdown",
+                "⬇️ Download Markdown",
+                markdown_str,
+                f"{filename}.md",
+                "text/markdown",
                 use_container_width=True
             )
+
+        # 🌍 Translation
+        # 🌍 Translation
+        st.markdown("### 🌍 Translate & Export")
+        target_lang = st.selectbox(
+            "Select Language",
+            ["Hindi", "Tamil", "Telugu", "French", "Spanish", "German", "Arabic"],
+            key="trans_lang"
+        )
+        lang_code_map = {
+            "Hindi": "hi", "Tamil": "ta", "Telugu": "te",
+            "French": "fr", "Spanish": "es", "German": "de", "Arabic": "ar"
+        }
+        lang_code = lang_code_map[target_lang]
+
+        if st.button(f"🔁 Translate to {target_lang}", key="trans_btn"):
+            with st.spinner(f"Translating to {target_lang}..."):
+                try:
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+
+                    # 🔁 Optimized Prompt: Force clean Markdown output
+                    prompt = f"""
+                    You are a professional document translator.
+                    Translate the following Markdown content into {target_lang} ({lang_code}).
+                    Preserve ALL structure exactly:
+                    - Headings (#, ##, ###)
+                    - Lists (- or 1.)
+                    - Tables (format with |)
+                    - Code blocks
+                    - Emphasis (**bold**, *italic*)
+
+                    Return ONLY the translated Markdown.
+                    Do NOT add explanations, comments, or formatting notes.
+
+                    Content to translate:
+                    ```
+                    {markdown_text}
+                    ```
+                    """
+
+                    response = model.generate_content(prompt)
+                    translated_md = response.text.strip()
+
+                    # Validate response is Markdown-like
+                    if not translated_md or len(translated_md) < 5:
+                        raise Exception("Empty or invalid translation received")
+
+                    # Save to history
+                    st.session_state.document_history[filename]["translated"][lang_code] = translated_md
+
+                    st.success("✅ Translation complete!")
+
+                    # Show download button
+                    st.download_button(
+                        f"⬇️ Download {target_lang} Markdown",
+                        translated_md,
+                        f"{filename}_{lang_code}.md",
+                        "text/markdown",
+                        use_container_width=True,
+                        key=f"download_trans_{lang_code}_{filename}"
+                    )
+
+                    # Optional: Show preview
+                    with st.expander("📄 Preview Translated Document"):
+                        st.markdown('<div class="scroll-box markdown-body">', unsafe_allow_html=True)
+                        st.markdown(translated_md)
+                        st.markdown('</div>', unsafe_allow_html=True)
+
+                except Exception as e:
+                    st.error(f"❌ Translation failed: {str(e)}")
+
+    with tab4:
+        st.markdown("### 💬 Ask About This Document")
+
+        # Display chat
+        for msg in st.session_state.chat_history:
+            with st.chat_message(msg["role"]):
+                st.write(msg["content"])
+
+        # Use chat_input (only triggers once per send)
+        user_input = st.chat_input("Ask a question about this document...")
+
+        if user_input:
+            # Show user message
+            with st.chat_message("user"):
+                st.write(user_input)
+
+            # Get response
+            with st.chat_message("assistant"):
+                with st.spinner("🧠 Thinking..."):
+                    try:
+                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        response = model.generate_content([
+                            f"Answer based only on this document. Be concise.\n\nDocument:\n{markdown_text}",
+                            user_input
+                        ])
+                        answer = response.text
+                    except Exception as e:
+                        answer = f"❌ Error: {str(e)}"
+
+                st.write(answer)
+
+            # Save to chat history
+            st.session_state.chat_history.append({"role": "user", "content": user_input})
+            st.session_state.chat_history.append({"role": "assistant", "content": answer})
+
+            # No need for st.rerun() — chat_input handles it cleanly
+            # Streamlit will auto-rerun and input clears automatically
+
+        # Clear Chat Button
+        if st.button("🗑️ Clear Chat"):
+            st.session_state.chat_history = []
+            st.rerun()
+
+
+# -----------------------------
+# SIDEBAR: Document History
+# -----------------------------
+if st.session_state.document_history:
+    with st.sidebar:
+        st.header("📁 Recent Documents")
+        for name, data in reversed(st.session_state.document_history.items()):
+            with st.expander(f"📄 {name}"):
+                st.caption(f"📅 {data['timestamp']}")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.download_button(
+                        "📥 JSON",
+                        json.dumps(data["json_data"], indent=2),
+                        f"{name}.json",
+                        "application/json",
+                        use_container_width=True,
+                        key=f"hist_json_{name}"
+                    )
+                with col2:
+                    st.download_button(
+                        "📝 MD",
+                        data["markdown_text"],
+                        f"{name}.md",
+                        "text/markdown",
+                        use_container_width=True,
+                        key=f"hist_md_{name}"
+                    )
+                # Translations
+                if data["translated"]:
+                    st.markdown("**Translations:**")
+                    for lang_code, trans_text in data["translated"].items():
+                        st.download_button(
+                            f"🌍 {lang_code.upper()}",
+                            trans_text,
+                            f"{name}_{lang_code}.md",
+                            "text/markdown",
+                            use_container_width=True,
+                            key=f"trans_{name}_{lang_code}"
+                        )
 
 
 # -----------------------------
