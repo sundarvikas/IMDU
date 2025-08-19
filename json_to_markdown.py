@@ -123,7 +123,7 @@ def json_to_markdown(data: Dict[Any, Any], md_path: Optional[str] = None) -> str
                 if btype == "doc_title":
                     # Skip doc_title completely as per requirement
                     continue
-                elif btype == "section_header" and not first_section_added:
+                elif btype == "title" and not first_section_added:
                     # Promote first section_header to # Main Title
                     # Instead of unsafe md_lines[-2], just insert at top
                     md_lines.insert(0, f"# {content.strip()}\n\n")

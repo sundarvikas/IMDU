@@ -1,0 +1,212 @@
+{
+  "document": {
+    "doc-name": "Hackathon_Ideas_For_Team.pdf",
+    "pages": [
+      {
+        "page_index": 1,
+        "blocks": [
+          {
+            "id": "b1",
+            "type": "title",
+            "content": "Hackathon Idea Proposals (Domain-wise)",
+            "bbox": [
+              0,
+              0,
+              1,
+              1
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          },
+          {
+            "id": "b2",
+            "type": "section_header",
+            "content": "Healthcare",
+            "bbox": [
+              0,
+              0,
+              1,
+              1
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          },
+          {
+            "id": "b3",
+            "type": "text",
+            "content": "Problem Statement:\nMillions lack access to quality healthcare in rural or underserved areas. Mental health support is\noften overlooked, and public awareness is low.",
+            "bbox": [
+              0,
+              0,
+              1,
+              1
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          },
+          {
+            "id": "b4",
+            "type": "text",
+            "content": "Proposed Solution:\nDevelop a mobile + web platform for remote consultations with doctors, mental health support,\nhealth tracking, and Al-powered symptom checker in regional languages. Include awareness\ncampaigns via gamified health tips.",
+            "bbox": [
+              0,
+              0,
+              1,
+              1
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          },
+          {
+            "id": "b5",
+            "type": "section_header",
+            "content": "Education",
+            "bbox": [
+              0,
+              0,
+              1,
+              1
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          },
+          {
+            "id": "b6",
+            "type": "text",
+            "content": "Problem Statement:\nMany students in remote areas face challenges accessing affordable, high-quality education.\nInequality persists in learning tools, digital resources, and individual attention.",
+            "bbox": [
+              0,
+              0,
+              1,
+              1
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          },
+          {
+            "id": "b7",
+            "type": "text",
+            "content": "Proposed Solution:\nCreate a digital learning platform with adaptive learning paths, Al tutors, regional content access,\ndoubt-solving bots, and career guidance tools. Focus on low-bandwidth usage and mobile-first\ndesign.",
+            "bbox": [
+              0,
+              0,
+              1,
+              1
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          },
+          {
+            "id": "b8",
+            "type": "section_header",
+            "content": "Fintech",
+            "bbox": [
+              0,
+              0,
+              1,
+              1
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          },
+          {
+            "id": "b9",
+            "type": "text",
+            "content": "Problem Statement:\nFinancial illiteracy, lack of secure digital payments, and difficulty in accessing credit still affect large\npopulations, especially in Tier 2/3 cities.",
+            "bbox": [
+              0,
+              0,
+              1,
+              1
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          },
+          {
+            "id": "b10",
+            "type": "text",
+            "content": "Proposed Solution:\nDevelop a UPI-integrated app for budgeting, goal saving, real-time fraud detection alerts, gamified\nfinancial literacy content, and vernacular language support.",
+            "bbox": [
+              0,
+              0,
+              1,
+              1
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          },
+          {
+            "id": "b11",
+            "type": "section_header",
+            "content": "Sustainability",
+            "bbox": [
+              0,
+              0,
+              1,
+              1
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          },
+          {
+            "id": "b12",
+            "type": "text",
+            "content": "Problem Statement:\nPeople are unaware or disengaged from sustainable practices. Waste management, water\nconservation, and carbon tracking are neglected.",
+            "bbox": [
+              0,
+              0,
+              1,
+              1
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          }
+        ]
+      },
+      {
+        "page_index": 2,
+        "blocks": [
+          {
+            "id": "b13",
+            "type": "text",
+            "content": "Proposed Solution:\nDesign a platform that rewards eco-friendly habits. Allow waste collection requests, track household\ncarbon emissions, suggest improvements, and integrate smart device data for real-time feedback.",
+            "bbox": [
+              0,
+              0,
+              1,
+              1
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          }
+        ]
+      }
+    ]
+  }
+}

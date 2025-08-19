@@ -221,7 +221,7 @@ else:
     # Preview Section
     st.markdown("### 🔍 Document Preview")
     if uploaded_file.type.startswith("image"):
-        st.image(file_path, caption="📷 Image Preview", use_column_width=True)
+        st.image(file_path, caption="📷 Image Preview", use_container_width=True)
     elif uploaded_file.type == "application/pdf":
         try:
             import fitz  # PyMuPDF
