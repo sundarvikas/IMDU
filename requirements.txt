@@ -1,0 +1,6 @@
+google-generativeai
+docx2pdf
+streamlit
+PyMuPDF
+python-docx
+pillow
