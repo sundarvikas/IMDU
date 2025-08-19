@@ -16,7 +16,7 @@ except Exception as e:
 # PAGE CONFIG
 # -----------------------------
 st.set_page_config(
-    page_title="INTELLIGENT MULTI-LINGUAL DOCUMENT UNDERSTANDING",
+    page_title="IMDU Document Parser",
     page_icon="📄",
     layout="wide"
 )
@@ -174,7 +174,7 @@ def get_summary_stats(json_data):
 # -----------------------------
 # HEADER
 # -----------------------------
-st.markdown("<h1 style='text-align: center;'>📄 Document Parser</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>📄 INTELLIGEN MULTI-LINGUAL DOCUMENT UNDERSTANDING</h1>", unsafe_allow_html=True)
 st.markdown("""
 <div style="text-align: center; font-size: 1.1rem; color: #555; margin-bottom: 1.5rem;">
 Upload a PDF, image, or Word document to extract structured content.
