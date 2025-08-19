@@ -4,4 +4,6 @@ streamlit
 PyMuPDF
 python-docx
 pillow
-streamlit-authenticator
+camelot-py[cv]
+pandas 
+openpyxl
