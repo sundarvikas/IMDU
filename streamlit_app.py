@@ -193,11 +193,15 @@ if "document_history" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
+# --- NEW: Add session state for AI summary ---
+if "ai_summary" not in st.session_state:
+    st.session_state.ai_summary = None
+
 
 # -----------------------------
 # HEADER
 # -----------------------------
-st.markdown("<h1 style='text-align: center;'>📄 INTELLIGEN MULTI-LINGUAL DOCUMENT UNDERSTANDING</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>📄 INTELLIGENT MULTI-LINGUAL DOCUMENT UNDERSTANDING</h1>", unsafe_allow_html=True)
 st.markdown("""
 <div style="text-align: center; font-size: 1.1rem; color: #555; margin-bottom: 1.5rem;">
 Upload a PDF, image, or Word document to extract structured content.
@@ -261,6 +265,9 @@ else:
     if st.button("✨ Parse Document", key="parse", type="primary", use_container_width=True):
         with st.spinner("🧠 Analyzing document... This may take a few seconds."):
             try:
+                # --- NEW: Reset summary when a new document is parsed ---
+                st.session_state.ai_summary = None
+                
                 # Run the pipeline
                 json_data, markdown_text = process_document(
                     file_path=str(file_path),
@@ -299,8 +306,10 @@ if "json_data" in st.session_state:
     st.markdown("---")
     st.markdown(f"<div class='result-header'>Parsed Output</div>", unsafe_allow_html=True)
 
-    tab1, tab2, tab3, tab4 = st.tabs([
+    # --- UPDATED: Added a new tab for AI Summary and changed variables ---
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📑 Formatted Content",
+        "🤖 AI Summary",
         "📦 Structured Data",
         "⬇️ Export",
         "💬 Chat with Document"
@@ -313,7 +322,51 @@ if "json_data" in st.session_state:
             st.markdown(markdown_text)
             st.markdown('</div>', unsafe_allow_html=True)
 
+    # --- NEW: AI SUMMARY TAB ---
     with tab2:
+        st.markdown("### 🧠 AI-Generated Summary")
+        
+        # Display the summary if it already exists in the session state
+        if st.session_state.ai_summary:
+            st.markdown(st.session_state.ai_summary)
+            if st.button("🔄 Regenerate Summary", key="regen_summary"):
+                st.session_state.ai_summary = None # Clear summary to allow regeneration
+                st.rerun()
+        else:
+            st.info("Click the button below to generate a summary of the document.")
+            if st.button("✨ Generate Summary", use_container_width=True, type="primary"):
+                with st.spinner("✍️ Generating summary..."):
+                    try:
+                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        
+                        prompt = f"""
+                        You are an expert summarizer. Your task is to provide a concise, professional summary of the following document content.
+
+                        Instructions:
+                        1. Read the entire document content carefully.
+                        2. Identify the main topic and purpose of the document.
+                        3. Extract the 3-5 most important key points, findings, or conclusions.
+                        4. Present the summary in a clean, easy-to-read format. Start with a brief overview paragraph, followed by a bulleted list of the key points.
+                        5. Ensure the summary is objective and accurately reflects the source material.
+
+                        Document Content:
+                        ```
+                        {markdown_text}
+                        ```
+                        """
+                        
+                        response = model.generate_content(prompt)
+                        summary_text = response.text.strip()
+                        
+                        # Save the summary to session state and rerun to display it
+                        st.session_state.ai_summary = summary_text
+                        st.rerun()
+                    
+                    except Exception as e:
+                        st.error(f"❌ Could not generate summary: {str(e)}")
+
+    with tab3:
+        # This is now the 'Structured Data' tab
         st.markdown("### 🔍 JSON Structure")
         with st.expander("Show Full JSON", expanded=False):
             st.markdown('<div class="scroll-box">', unsafe_allow_html=True)
@@ -334,7 +387,8 @@ if "json_data" in st.session_state:
         total_elements = sum(stats.values())
         st.caption(f"📄 Total content blocks detected: {total_elements}")
 
-    with tab3:
+    with tab4:
+        # This is now the 'Export' tab
         st.markdown("### 💾 Download Results")
         json_str = json.dumps(json_data, indent=2, ensure_ascii=False)
         markdown_str = markdown_text
@@ -358,7 +412,6 @@ if "json_data" in st.session_state:
             )
 
         # 🌍 Translation
-        # 🌍 Translation
         st.markdown("### 🌍 Translate & Export")
         target_lang = st.selectbox(
             "Select Language",
@@ -375,8 +428,6 @@ if "json_data" in st.session_state:
             with st.spinner(f"Translating to {target_lang}..."):
                 try:
                     model = genai.GenerativeModel('gemini-1.5-flash')
-
-                    # 🔁 Optimized Prompt: Force clean Markdown output
                     prompt = f"""
                     You are a professional document translator.
                     Translate the following Markdown content into {target_lang} ({lang_code}).
@@ -399,16 +450,12 @@ if "json_data" in st.session_state:
                     response = model.generate_content(prompt)
                     translated_md = response.text.strip()
 
-                    # Validate response is Markdown-like
                     if not translated_md or len(translated_md) < 5:
                         raise Exception("Empty or invalid translation received")
 
-                    # Save to history
                     st.session_state.document_history[filename]["translated"][lang_code] = translated_md
-
                     st.success("✅ Translation complete!")
 
-                    # Show download button
                     st.download_button(
                         f"⬇️ Download {target_lang} Markdown",
                         translated_md,
@@ -418,7 +465,6 @@ if "json_data" in st.session_state:
                         key=f"download_trans_{lang_code}_{filename}"
                     )
 
-                    # Optional: Show preview
                     with st.expander("📄 Preview Translated Document"):
                         st.markdown('<div class="scroll-box markdown-body">', unsafe_allow_html=True)
                         st.markdown(translated_md)
@@ -427,7 +473,8 @@ if "json_data" in st.session_state:
                 except Exception as e:
                     st.error(f"❌ Translation failed: {str(e)}")
 
-    with tab4:
+    with tab5:
+        # This is now the 'Chat with Document' tab
         st.markdown("### 💬 Ask About This Document")
 
         # Display chat
@@ -435,21 +482,18 @@ if "json_data" in st.session_state:
             with st.chat_message(msg["role"]):
                 st.write(msg["content"])
 
-        # Use chat_input (only triggers once per send)
         user_input = st.chat_input("Ask a question about this document...")
 
         if user_input:
-            # Show user message
             with st.chat_message("user"):
                 st.write(user_input)
 
-            # Get response
             with st.chat_message("assistant"):
                 with st.spinner("🧠 Thinking..."):
                     try:
                         model = genai.GenerativeModel('gemini-1.5-flash')
                         response = model.generate_content([
-                            f"Answer based only on this document. Be concise.\n\nDocument:\n{markdown_text}",
+                            f"{user_input}, Answer based only on this document. Be concise.\n\nDocument:\n{markdown_text}",
                             user_input
                         ])
                         answer = response.text
@@ -458,14 +502,9 @@ if "json_data" in st.session_state:
 
                 st.write(answer)
 
-            # Save to chat history
             st.session_state.chat_history.append({"role": "user", "content": user_input})
             st.session_state.chat_history.append({"role": "assistant", "content": answer})
 
-            # No need for st.rerun() — chat_input handles it cleanly
-            # Streamlit will auto-rerun and input clears automatically
-
-        # Clear Chat Button
         if st.button("🗑️ Clear Chat"):
             st.session_state.chat_history = []
             st.rerun()
@@ -477,7 +516,7 @@ if "json_data" in st.session_state:
 if st.session_state.document_history:
     with st.sidebar:
         st.header("📁 Recent Documents")
-        for name, data in reversed(st.session_state.document_history.items()):
+        for name, data in reversed(list(st.session_state.document_history.items())):
             with st.expander(f"📄 {name}"):
                 st.caption(f"📅 {data['timestamp']}")
                 col1, col2 = st.columns(2)
@@ -499,7 +538,6 @@ if st.session_state.document_history:
                         use_container_width=True,
                         key=f"hist_md_{name}"
                     )
-                # Translations
                 if data["translated"]:
                     st.markdown("**Translations:**")
                     for lang_code, trans_text in data["translated"].items():

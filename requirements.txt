@@ -4,3 +4,4 @@ streamlit
 PyMuPDF
 python-docx
 pillow
+streamlit-authenticator
