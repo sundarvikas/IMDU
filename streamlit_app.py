@@ -16,7 +16,7 @@ except Exception as e:
 # PAGE CONFIG
 # -----------------------------
 st.set_page_config(
-    page_title="Document Parser",
+    page_title="INTELLIGENT MULTI-LINGUAL DOCUMENT UNDERSTANDING",
     page_icon="📄",
     layout="wide"
 )
