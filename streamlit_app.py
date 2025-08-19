@@ -9,7 +9,7 @@ import google.generativeai as genai
 # GEMINI SETUP - Direct API Key
 # -----------------------------
 # ⚠️ WARNING: Only for demo/hackathon use. Never expose API keys in production.
-GEMINI_API_KEY = "AIzaSyDqoS0L2DJ2IaKmJdC-BopHUDK-srerWzo"  # Directly embedded
+GEMINI_API_KEY = "AIzaSyCsFipgzT4QDCUu7qd1bN-QX7mTcTtJ_Ys"  # Directly embedded
 
 try:
     genai.configure(api_key=GEMINI_API_KEY)
