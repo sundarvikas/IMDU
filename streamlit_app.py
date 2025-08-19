@@ -499,7 +499,7 @@ if "json_data" in st.session_state:
 # -----------------------------
 # SIDEBAR: Document History
 # -----------------------------
-if st.session_state.document_history:
+if "document_history" in st.session_state and st.session_state.document_history:
     with st.sidebar:
         st.header("Recent Documents")
         for name, data in reversed(list(st.session_state.document_history.items())):
