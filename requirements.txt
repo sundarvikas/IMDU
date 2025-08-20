@@ -1,13 +1,11 @@
-google-generativeai
-docx2pdf
 streamlit
+google-generativeai
+pyrebase4
 PyMuPDF
 python-docx
+docx2pdf
 pillow
 camelot-py[cv]
-pandas 
+pandas
 openpyxl
 resend
-pathlib
-pandas
-pyrebase
