@@ -21,14 +21,14 @@ GEMINI_API_KEY = "AIzaSyBVFn8ZtXlPJNaVblV0aolqeyhVx6mW-zA"  # Directly embedded
 try:
     genai.configure(api_key=GEMINI_API_KEY)
 except Exception as e:
-    st.info(f"Failed to configure Gemini: {str(e)}")  # was st.error
+    st.info(f"Failed to configure Gemini: {str(e)}")
     st.stop()
 
 # Import your pipeline
 try:
     from imdu_pipeline import process_document
 except Exception as e:
-    st.info(f"Error loading pipeline: {e}")  # was st.error
+    st.info(f"Error loading pipeline: {e}")
     st.info("Make sure `imdu_pipeline.py` is in the same directory and has `process_document()`.")
     st.stop()
 
@@ -77,7 +77,7 @@ st.markdown("<h1 style='text-align: center; font-size:2rem; font-weight:600; mar
 st.markdown("<div style='text-align:center; font-size:1rem; color:#444; margin-bottom:1rem;'>Upload a PDF, image, or Word document to extract structured content.</div>", unsafe_allow_html=True)
 st.markdown("""
 <div>
-    <div style="font-size:2rem; margin-bottom:0.5rem;">&#128194;</div>
+    <div style="font-size:2rem; margin-bottom:0.5rem;">Document Upload</div>
     <div>Drag & drop your document here</div>
     <div>Supported formats: PDF, PNG, JPG, DOCX</div>
 </div>
@@ -171,11 +171,11 @@ else:
                     st.session_state.ai_summary = summary_text
                 except Exception as e:
                     st.session_state.ai_summary = None
-                    st.warning(f"Automatic summary generation failed: {str(e)}")  # already blue/yellow
+                    st.warning(f"Automatic summary generation failed: {str(e)}")
 
                 st.toast("Parsing complete!")
             except Exception as e:
-                st.info(f"Processing failed: {str(e)}")  # was st.error
+                st.info(f"Processing failed: {str(e)}")
                 st.exception(e)
 
 def get_summary_stats(json_data: dict) -> dict:
@@ -195,21 +195,12 @@ def get_summary_stats(json_data: dict) -> dict:
     """
     type_counts = {}
     try:
-        # Safely access the list of pages, defaulting to an empty list
         pages = json_data.get("document", {}).get("pages", [])
-        
-        # Loop through each page in the document
         for page in pages:
-            # Loop through each content block on the page
             for block in page.get("blocks", []):
-                # Get the block type, default to "Unknown", and capitalize it
                 block_type = block.get("type", "unknown").title()
-                
-                # Increment the counter for this block type
                 type_counts[block_type] = type_counts.get(block_type, 0) + 1
-                
     except Exception as e:
-        # If any error occurs during parsing, show a warning in the UI
         st.warning(f"Error parsing JSON structure for stats: {str(e)}")
         return {"Error": 1}
         
@@ -279,7 +270,7 @@ if "json_data" in st.session_state:
                             st.session_state.ai_summary = summary_text
                             st.rerun()
                         except Exception as e:
-                            st.info(f"Could not generate summary: {str(e)}")  # was st.error
+                            st.info(f"Could not generate summary: {str(e)}")
 
         with tabs[2]:
             st.markdown("### Extracted Tables")
@@ -406,7 +397,7 @@ if "json_data" in st.session_state:
                             st.markdown(translated_md)
                             st.markdown('</div>', unsafe_allow_html=True)
                     except Exception as e:
-                        st.info(f"Translation failed: {str(e)}")  # was st.error
+                        st.info(f"Translation failed: {str(e)}")
 
         with tabs[5]:
             st.markdown("### Ask About This Document")
@@ -435,29 +426,34 @@ if "json_data" in st.session_state:
                 st.session_state.chat_history = []
                 st.rerun()
 
+        # This is the final code for your Email Report tab (e.g., with tabs[6]:)
+
         with tabs[6]:
-            st.markdown("### Email Report")
+            st.markdown("### 📧 Email Report")
             st.info("Select the content you wish to send and enter the recipient's details below.")
 
             with st.form("email_form"):
                 recipient = st.text_input("Recipient's Email", placeholder="name@example.com")
                 subject = st.text_input("Subject", value=f"Document Analysis: {st.session_state.filename}")
 
-                st.markdown("Select content to include:")
+                st.markdown("**Select content to include:**")
                 include_summary = st.checkbox("Include AI Summary (in email body)", value=True)
                 attach_md = st.checkbox("Attach Markdown File (.md)", value=True)
                 attach_json = st.checkbox("Attach JSON File (.json)")
+                
+                # Only show the option to attach tables if tables were found
                 attach_tables = False
                 if st.session_state.json_tables:
                     attach_tables = st.checkbox("Attach Extracted Tables (.xlsx)")
 
                 custom_message = st.text_area("Custom Message (Optional)", placeholder="Add a personal note here...")
-
-                submitted = st.form_submit_button("Send Email")
+                
+                # A single, final submit button
+                submitted = st.form_submit_button("✉️ Send Email")
 
                 if submitted:
                     if not recipient:
-                        st.info("Please enter a recipient's email address.")  # was st.error
+                        st.warning("Please enter a recipient's email address.")
                     else:
                         with st.spinner("Preparing and sending your email..."):
                             attachment_paths = []
@@ -482,7 +478,7 @@ if "json_data" in st.session_state:
                                     excel_path.write_bytes(excel_data)
                                     attachment_paths.append(str(excel_path))
 
-                                # Send the email
+                                # Call the updated email function
                                 success, message = send_report_email(
                                     recipient=recipient,
                                     subject=subject,
@@ -494,7 +490,7 @@ if "json_data" in st.session_state:
                                 if success:
                                     st.success(message)
                                 else:
-                                    st.info(message)  # was st.error
+                                    st.error(message)
 
 # -----------------------------
 # SESSION STATE INITIALIZATION

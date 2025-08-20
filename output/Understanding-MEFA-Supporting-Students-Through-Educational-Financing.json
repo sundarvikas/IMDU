@@ -1,0 +1,167 @@
+{
+  "document": {
+    "doc-name": "Understanding-MEFA-Supporting-Students-Through-Educational-Financing.png",
+    "pages": [
+      {
+        "page_index": 1,
+        "blocks": [
+          {
+            "id": "b1",
+            "type": "title",
+            "content": "Understanding MEFA: Supporting Students Through Educational Financing",
+            "bbox": [
+              10,
+              10,
+              150,
+              150
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.98
+          },
+          {
+            "id": "b2",
+            "type": "paragraph",
+            "content": "The Massachusetts Educational Financing Authority (MEFA) is a nonprofit organization committed to simplifying college financing for students and families. MEFA offers essential resources, guidance, and loan programs to make higher education accessible and affordable. Through detailed information on scholarships, grants, and low-interest student loans, MEFA assists families in making informed decisions and planning effectively for college expenses.",
+            "bbox": [
+              160,
+              10,
+              280,
+              480
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.97
+          },
+          {
+            "id": "b3",
+            "type": "paragraph",
+            "content": "Beyond financial products, MEFA provides personalized counseling and online tools. These resources enable students to calculate loan costs, compare repayment options, and estimate future financial needs. With a strong emphasis on transparency and education, MEFA empowers students to manage their financial future while minimizing debt. The organization partners with schools, educators, and financial institutions to offer comprehensive support throughout the college journey.",
+            "bbox": [
+              290,
+              10,
+              410,
+              480
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.96
+          },
+          {
+            "id": "b4",
+            "type": "section_header",
+            "content": "MEFA Student Loan Options",
+            "bbox": [
+              420,
+              60,
+              460,
+              350
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.99
+          },
+          {
+            "id": "b5",
+            "type": "table",
+            "content": {
+              "headers": [
+                "Loan Type",
+                "Interest Rate",
+                "Eligibility Criteria",
+                "Repayment Term"
+              ],
+              "rows": [
+                [
+                  "MEFA College Loan",
+                  "4.5%",
+                  "Massachusetts resident",
+                  "10-20 years"
+                ],
+                [
+                  "MEFA PLUS Loan",
+                  "5.0%",
+                  "Undergraduate or graduate",
+                  "10-25 years"
+                ],
+                [
+                  "MEFA Parent Loan",
+                  "4.8%",
+                  "Parents of students",
+                  "10-15 years"
+                ]
+              ]
+            },
+            "bbox": [
+              470,
+              60,
+              580,
+              460
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          },
+          {
+            "id": "b6",
+            "type": "section_header",
+            "content": "MEFA Program Comparisons",
+            "bbox": [
+              590,
+              60,
+              630,
+              350
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.99
+          },
+          {
+            "id": "b7",
+            "type": "table",
+            "content": {
+              "headers": [
+                "Program",
+                "Max Loan Amount",
+                "Notable Feature"
+              ],
+              "rows": [
+                [
+                  "MEFA College Loan",
+                  "$50,000",
+                  "Low fixed interest rate"
+                ],
+                [
+                  "MEFA Parent Loan",
+                  "$60,000",
+                  "Designed for parental borrowing"
+                ],
+                [
+                  "MEFA College Planning Tools",
+                  "N/A",
+                  "Online calculators & guides"
+                ]
+              ]
+            },
+            "bbox": [
+              640,
+              60,
+              750,
+              460
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          }
+        ]
+      }
+    ]
+  }
+}
