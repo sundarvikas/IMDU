@@ -78,8 +78,6 @@ st.markdown("<div style='text-align:center; font-size:1rem; color:#444; margin-b
 st.markdown("""
 <div>
     <div style="font-size:2rem; margin-bottom:0.5rem;">Document Upload</div>
-    <div>Drag & drop your document here</div>
-    <div>Supported formats: PDF, PNG, JPG, DOCX</div>
 </div>
 """, unsafe_allow_html=True)
 
