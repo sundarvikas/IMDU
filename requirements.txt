@@ -1,11 +1,20 @@
+# requirements.txt
+
+# Core App & AI
 streamlit
 google-generativeai
-pyrebase4
+supabase
+
+# Document Processing & Data Handling
+pandas
 PyMuPDF
 python-docx
-docx2pdf
-pillow
-camelot-py[cv]
-pandas
+Pillow
 openpyxl
+camelot-py[cv]
+
+# Optional (if used by your email_report.py)
 resend
+
+# Optional (if your pipeline uses it)
+docx2pdf
