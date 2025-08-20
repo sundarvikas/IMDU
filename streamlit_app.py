@@ -555,8 +555,9 @@ if "document_history" in st.session_state and st.session_state.document_history:
 # -----------------------------
 st.markdown("""
 <style>
+/* General button styles */
 .stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {
-    background: #d33a2c !important;
+    background: #007bff !important; /* Primary Blue */
     color: #fff !important;
     border-radius: 4px !important;
     border: none !important;
@@ -564,9 +565,21 @@ st.markdown("""
     box-shadow: none !important;
     transition: background 0.2s;
 }
+
+/* Hover effects for buttons */
 .stButton > button:hover, .stDownloadButton > button:hover, .stFormSubmitButton > button:hover {
-    background: #a82312 !important;
+    background: #0056b3 !important; /* Darker Blue on hover */
     color: #fff !important;
+}
+
+/* Active tab style */
+button[data-baseweb="tab"][aria-selected="true"] {
+    border-bottom-color: #007bff !important; /* Blue underline for the active tab */
+}
+
+/* To change the text color of the active tab (optional) */
+button[data-baseweb="tab"][aria-selected="true"] p {
+    color: #007bff;
 }
 </style>
 """, unsafe_allow_html=True)
