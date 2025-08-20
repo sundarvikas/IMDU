@@ -10,3 +10,4 @@ openpyxl
 resend
 pathlib
 pandas
+pyrebase4

@@ -1,36 +1,20 @@
-# streamlit_app.py
 import streamlit as st
 from pathlib import Path
 import json
 from datetime import datetime
 import google.generativeai as genai
-# --- NEW IMPORTS for Table Processing ---
+import pyrebase
 import pandas as pd
 from io import BytesIO
 import tempfile
 
-# --- NEW: Import our email sending function ---
-from email_report import send_report_email
-
-# -----------------------------
-# GEMINI SETUP - Direct API Key
-# -----------------------------
-# ⚠️ WARNING: Only for demo/hackathon use. Never expose API keys in production.
-GEMINI_API_KEY = "AIzaSyBVFn8ZtXlPJNaVblV0aolqeyhVx6mW-zA"  # Directly embedded
-
+# --- Import email function ---
 try:
-    genai.configure(api_key=GEMINI_API_KEY)
-except Exception as e:
-    st.info(f"Failed to configure Gemini: {str(e)}")
-    st.stop()
-
-# Import your pipeline
-try:
-    from imdu_pipeline import process_document
-except Exception as e:
-    st.info(f"Error loading pipeline: {e}")
-    st.info("Make sure `imdu_pipeline.py` is in the same directory and has `process_document()`.")
-    st.stop()
+    from email_report import send_report_email
+except ImportError:
+    def send_report_email(*args, **kwargs):
+        st.error("email_report.py not found. Email functionality is disabled.")
+        return False, "Email function not found."
 
 # -----------------------------
 # PAGE CONFIG
@@ -40,157 +24,228 @@ st.set_page_config(
     page_icon="📄",
     layout="wide"
 )
+
+# -----------------------------
+# SESSION STATE INITIALIZATION
+# -----------------------------
+if 'user' not in st.session_state:
+    st.session_state.user = None
+if 'auth_view' not in st.session_state:
+    st.session_state.auth_view = 'login'
+if 'username' not in st.session_state:
+    st.session_state.username = None
+if "json_data" not in st.session_state:
+    st.session_state.json_data = None
+if "markdown_text" not in st.session_state:
+    st.session_state.markdown_text = None
+if "filename" not in st.session_state:
+    st.session_state.filename = None
+if "current_doc_key" not in st.session_state:
+    st.session_state.current_doc_key = None
+if "ai_summary" not in st.session_state:
+    st.session_state.ai_summary = None
+if "json_tables" not in st.session_state:
+    st.session_state.json_tables = []
+if "document_history" not in st.session_state:
+    st.session_state.document_history = {}
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+# -----------------------------
+# FIREBASE INITIALIZATION (Cache it)
+# -----------------------------
+@st.cache_resource
+def get_firebase():
+    try:
+        firebase_config = st.secrets["firebase_credentials"]
+        return pyrebase.initialize_app(firebase_config)
+    except Exception as e:
+        st.error(f"Firebase config error: {e}")
+        return None
+
+firebase = get_firebase()
+if not firebase:
+    st.stop()
+
+auth = firebase.auth()
+
+# -----------------------------
+# AUTO-LOGIN FUNCTION
+# -----------------------------
+def auto_login():
+    if st.session_state.user and isinstance(st.session_state.user, dict):
+        refresh_token = st.session_state.user.get("refreshToken")
+        if not refresh_token:
+            return False
+        try:
+            refreshed = auth.refresh(refresh_token)
+            st.session_state.user.update({
+                "idToken": refreshed["idToken"],
+                "refreshToken": refreshed["refreshToken"]
+            })
+            user_info = auth.get_account_info(refreshed["idToken"])
+            email = st.session_state.user["email"]
+            display_name = user_info['users'][0].get('displayName')
+            st.session_state.username = display_name or email.split('@')[0]
+            return True
+        except Exception:
+            st.session_state.user = None
+            st.session_state.username = None
+            return False
+    return False
+
+# -----------------------------
+# USER AUTHENTICATION
+# -----------------------------
+def app_auth():
+    # Try auto-login first
+    if st.session_state.user and auto_login():
+        st.sidebar.subheader(f"Welcome, {st.session_state.username}!")
+        if st.sidebar.button("Logout", use_container_width=True):
+            st.session_state.update(user=None, username=None, auth_view='login')
+            st.rerun()
+        return True
+
+    # --- AUTH LOGIC ---
+    def login_callback():
+        try:
+            email, password = st.session_state['login_email'], st.session_state['login_password']
+            user = auth.sign_in_with_email_and_password(email, password)
+            st.session_state.user = {
+                "email": user["email"],
+                "idToken": user["idToken"],
+                "refreshToken": user["refreshToken"]
+            }
+            info = auth.get_account_info(user["idToken"])["users"][0]
+            st.session_state.username = info.get("displayName", email.split('@')[0])
+        except Exception:
+            st.error("Login Failed: Please check your credentials.")
+
+    def signup_callback():
+        try:
+            email, password, username = st.session_state['signup_email'], st.session_state['signup_password'], st.session_state['signup_username']
+            user = auth.create_user_with_email_and_password(email, password)
+            auth.update_profile(user['idToken'], display_name=username)
+            st.session_state.user = {
+                "email": user["email"],
+                "idToken": user["idToken"],
+                "refreshToken": user["refreshToken"]
+            }
+            st.session_state.username = username
+            st.success("Account created successfully!")
+        except Exception as e:
+            st.error(f"Sign-up Failed: {e}")
+
+    def reset_password_callback():
+        try:
+            auth.send_password_reset_email(st.session_state['reset_email'])
+            st.success("Password reset link sent! Check your email.")
+            st.session_state.auth_view = 'login'
+        except Exception as e:
+            st.error(f"Failed to send reset link: {e}")
+
+    def logout_user():
+        st.session_state.update(user=None, username=None, auth_view='login')
+
+    # --- AUTH UI ---
+    if not st.session_state.user:
+        st.title("IMDU Document Parser")
+        if st.session_state.auth_view == 'login':
+            st.subheader("Log In")
+            with st.form("login_form"):
+                st.text_input("Email", key="login_email")
+                st.text_input("Password", type="password", key="login_password")
+                st.form_submit_button("Log In", on_click=login_callback, type="primary")
+            c1, c2 = st.columns(2)
+            if c1.button("Sign Up", use_container_width=True):
+                st.session_state.auth_view = 'signup'
+                st.rerun()
+            if c2.button("Forgot Password?", use_container_width=True):
+                st.session_state.auth_view = 'forgot_password'
+                st.rerun()
+
+        elif st.session_state.auth_view == 'signup':
+            st.subheader("Create an Account")
+            with st.form("signup_form"):
+                st.text_input("User Name", key="signup_username")
+                st.text_input("Email", key="signup_email")
+                pw1 = st.text_input("Password", type="password", key="signup_password")
+                pw2 = st.text_input("Confirm Password", type="password")
+                if st.form_submit_button("Sign Up", type="primary"):
+                    if not all([st.session_state['signup_username'], st.session_state['signup_email'], pw1, pw2]):
+                        st.error("Please fill in all fields.")
+                    elif pw1 != pw2:
+                        st.error("Passwords do not match.")
+                    else:
+                        signup_callback()
+            if st.button("Already have an account? Log In", use_container_width=True):
+                st.session_state.auth_view = 'login'
+                st.rerun()
+
+        elif st.session_state.auth_view == 'forgot_password':
+            st.subheader("Reset Password")
+            with st.form("reset_form"):
+                st.text_input("Enter your email address", key="reset_email")
+                st.form_submit_button("Send Reset Link", on_click=reset_password_callback, type="primary")
+            if st.button("Back to Log In", use_container_width=True):
+                st.session_state.auth_view = 'login'
+                st.rerun()
+
+        return False
+    else:
+        st.sidebar.subheader(f"Welcome, {st.session_state.username}!")
+        if st.sidebar.button("Logout", use_container_width=True):
+            logout_user()
+            st.rerun()
+        return True
+
+# --- Main app starts here ---
+if not app_auth():
+    st.stop()
+
+# -----------------------------
+# GEMINI SETUP
+# -----------------------------
+try:
+    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=GEMINI_API_KEY)
+except Exception as e:
+    st.error("GEMINI_API_KEY not found in secrets.toml. Please add it to proceed.")
+    st.stop()
+
+# Load pipeline
+try:
+    from imdu_pipeline import process_document
+except Exception as e:
+    st.error(f"Error loading pipeline: {e}")
+    st.stop()
+
 # -----------------------------
 # HELPER FUNCTIONS
 # -----------------------------
-def to_excel(df_list: list) -> bytes:
-    """
-    Writes a list of DataFrames to separate sheets in an in-memory Excel file.
-    Uses openpyxl engine (comes with pandas) for better compatibility.
-    """
+@st.cache_data
+def to_excel(df_list):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         for i, df in enumerate(df_list):
             df.to_excel(writer, index=False, sheet_name=f'Table_{i+1}')
-    output.seek(0)
-    return output.read()
+    return output.getvalue()
 
 def find_tables_in_json(json_data):
-    table_dfs = []
+    tables = []
     try:
-        pages = json_data.get("document", {}).get("pages", [])
-        for page in pages:
+        for page in json_data.get("document", {}).get("pages", []):
             for block in page.get("blocks", []):
                 if block.get("type") == "table":
                     headers = block.get("content", {}).get("headers", [])
                     rows = block.get("content", {}).get("rows", [])
                     if headers and rows:
-                        df = pd.DataFrame(rows, columns=headers)
-                        table_dfs.append(df)
+                        tables.append(pd.DataFrame(rows, columns=headers))
     except Exception as e:
-        st.warning(f"Error extracting tables from JSON: {e}")
-    return table_dfs
-# -----------------------------
-# HEADER & FILE UPLOADER (normalized)
-# -----------------------------
-st.markdown("<h1 style='text-align: center; font-size:2rem; font-weight:600; margin-bottom:0.5rem;'>IMDU Document Parser</h1>", unsafe_allow_html=True)
-st.markdown("<div style='text-align:center; font-size:1rem; color:#444; margin-bottom:1rem;'>Upload a PDF, image, or Word document to extract structured content.</div>", unsafe_allow_html=True)
-st.markdown("""
-<div>
-    <div style="font-size:2rem; margin-bottom:0.5rem;">Document Upload</div>
-</div>
-""", unsafe_allow_html=True)
-
-uploaded_file = st.file_uploader(
-    "Upload your document",
-    type=["pdf", "png", "jpg", "jpeg", "docx"],
-    label_visibility="collapsed"
-)
-
-if uploaded_file is None:
-    st.info("Upload a file to get started.")
-else:
-    uploads_dir = Path("uploads")
-    output_dir = Path("output")
-    uploads_dir.mkdir(exist_ok=True)
-    output_dir.mkdir(exist_ok=True)
-
-    file_path = uploads_dir / uploaded_file.name
-    stem = file_path.stem
-
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-
-    st.success(f"{uploaded_file.name} uploaded.")
-
-    # Preview Section
-    st.markdown("### Document Preview")
-    if uploaded_file.type.startswith("image"):
-        st.image(file_path, caption="Image Preview", use_container_width=True)
-    elif uploaded_file.type == "application/pdf":
-        try:
-            import fitz  # PyMuPDF
-            doc = fitz.open(file_path)
-            page = doc.load_page(0)
-            pix = page.get_pixmap(dpi=96)
-            img_bytes = pix.tobytes("png")
-            st.image(img_bytes, caption="PDF Page 1 Preview", use_column_width=True)
-        except Exception as e:
-            st.info(f"Preview not available for this PDF. Error: {str(e)}")
-    elif uploaded_file.name.endswith(".docx"):
-        st.info("Word document uploaded. Preview not available.")
-
-    if st.button("Parse Document", key="parse", type="primary", use_container_width=True):
-        with st.spinner("Analyzing document... This may take a few moments."):
-            try:
-                # Reset previous results
-                st.session_state.ai_summary = None
-                st.session_state.json_tables = []
-                
-                json_data, markdown_text = process_document(
-                    file_path=str(file_path),
-                    json_path=str(output_dir / f"{stem}.json"),
-                    md_path=str(output_dir / f"{stem}.md")
-                )
-
-                st.session_state.json_tables = find_tables_in_json(json_data)
-                st.session_state.json_data = json_data
-                st.session_state.markdown_text = markdown_text
-                st.session_state.filename = stem
-                st.session_state.processed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                st.session_state.document_history[stem] = {
-                    "json_data": json_data,
-                    "markdown_text": markdown_text,
-                    "timestamp": st.session_state.processed_at,
-                    "translated": {}
-                }
-
-                # --- AUTOMATIC SUMMARY GENERATION ---
-                try:
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    prompt = f"""
-                    You are an expert summarizer. Your task is to provide a concise, professional summary of the following document content.
-
-                    Instructions:
-                    1. Read the entire document content carefully.
-                    2. Identify the main topic and purpose of the document.
-                    3. Extract the 3-5 most important key points, findings, or conclusions.
-                    4. Present the summary in a clean, easy-to-read format. Start with a brief overview paragraph, followed by a bulleted list of the key points.
-                    5. Ensure the summary is objective and accurately reflects the source material.
-
-                    Document Content:
-                    ```
-                    {markdown_text}
-                    ```
-                    """
-                    response = model.generate_content(prompt)
-                    summary_text = response.text.strip()
-                    st.session_state.ai_summary = summary_text
-                except Exception as e:
-                    st.session_state.ai_summary = None
-                    st.warning(f"Automatic summary generation failed: {str(e)}")
-
-                st.toast("Parsing complete!")
-            except Exception as e:
-                st.info(f"Processing failed: {str(e)}")
-                st.exception(e)
+        st.warning(f"Error extracting tables: {e}")
+    return tables
 
 def get_summary_stats(json_data: dict) -> dict:
-    """
-    Extracts content type counts from the parsed JSON structure.
-    
-    This function navigates through the nested document -> pages -> blocks
-    structure, counts each block by its 'type' attribute, and returns
-    a dictionary of the counts.
-
-    Args:
-        json_data (dict): The JSON data loaded as a Python dictionary.
-
-    Returns:
-        dict: A dictionary where keys are block types (e.g., 'Table')
-              and values are their counts (e.g., 2).
-    """
     type_counts = {}
     try:
         pages = json_data.get("document", {}).get("pages", [])
@@ -200,234 +255,178 @@ def get_summary_stats(json_data: dict) -> dict:
                 type_counts[block_type] = type_counts.get(block_type, 0) + 1
     except Exception as e:
         st.warning(f"Error parsing JSON structure for stats: {str(e)}")
-        return {"Error": 1}
-        
     return type_counts
 
+# -----------------------------
+# MAIN APP UI
+# -----------------------------
+st.markdown("<h1 style='text-align: center;'>IMDU Document Parser</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #aaa;'>Upload a document to extract structured content.</p>", unsafe_allow_html=True)
+
+uploaded_file = st.file_uploader("Upload PDF, Image, or DOCX", type=["pdf", "png", "jpg", "jpeg", "docx"], label_visibility="collapsed")
+
+if uploaded_file:
+    uploads_dir, output_dir = Path("uploads"), Path("output")
+    uploads_dir.mkdir(exist_ok=True)
+    output_dir.mkdir(exist_ok=True)
+    file_path = uploads_dir / uploaded_file.name
+    stem = file_path.stem
+    with open(file_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    st.success(f"`{uploaded_file.name}` uploaded successfully.")
+
+    with st.expander("Show Document Preview"):
+        if uploaded_file.type.startswith("image"):
+            st.image(file_path, caption="Image Preview", use_container_width=True)
+        elif uploaded_file.type == "application/pdf":
+            try:
+                import fitz
+                doc = fitz.open(file_path)
+                page = doc.load_page(0)
+                pix = page.get_pixmap(dpi=96)
+                img_bytes = pix.tobytes("png")
+                st.image(img_bytes, caption="PDF Page 1 Preview", use_column_width=True)
+            except Exception as e:
+                st.warning(f"Could not generate PDF preview: {e}")
+        else:
+            st.info("Preview is not available for this file type.")
+
+    if st.button("Parse Document", type="primary", use_container_width=True):
+        with st.spinner("Analyzing document..."):
+            try:
+                json_data, markdown_text = process_document(
+                    file_path=str(file_path),
+                    json_path=str(output_dir / f"{stem}.json"),
+                    md_path=str(output_dir / f"{stem}.md")
+                )
+                st.session_state.update(
+                    json_data=json_data,
+                    markdown_text=markdown_text,
+                    filename=stem,
+                    json_tables=find_tables_in_json(json_data),
+                    ai_summary=None,
+                    chat_history=[]
+                )
+                doc_key = f"{stem}{file_path.suffix}"
+                st.session_state.current_doc_key = doc_key
+                st.session_state.document_history[doc_key] = {
+                    "json_data": json_data,
+                    "markdown_text": markdown_text,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "translations": {}
+                }
+            except Exception as e:
+                st.error(f"Processing failed: {str(e)}")
+                st.stop()
+
+        # --- Auto Summary ---
+        with st.spinner("Generating AI summary..."):
+            try:
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                response = model.generate_content(f"Provide a concise, professional summary of the document:\n\n{markdown_text}")
+                st.session_state.ai_summary = response.text
+                st.toast("Parsing and summary complete!", icon="✅")
+            except Exception as e:
+                st.warning(f"Automatic summary generation failed: {e}")
+                st.toast("Parsing complete, but summary failed.", icon="⚠️")
+        st.rerun()
 
 # -----------------------------
-# DISPLAY RESULTS (if processed)
+# DISPLAY RESULTS TABS
 # -----------------------------
-if "json_data" in st.session_state:
-    json_data = st.session_state.json_data
-    markdown_text = st.session_state.markdown_text
-    filename = st.session_state.filename
+if st.session_state.get("json_data"):
+    st.divider()
+    tabs = st.tabs(["Formatted Content", "AI Summary", "Extracted Tables", "Structured Data", "Export & Translate", "Chat with Document", "Email Report"])
 
-    st.markdown("---")
-    st.markdown(f"<div class='result-header'>Parsed Output</div>", unsafe_allow_html=True)
+    with tabs[0]:
+        st.markdown(st.session_state.markdown_text, unsafe_allow_html=True)
 
-    if st.session_state.json_data:
-        tab_titles = [
-            "Formatted Content",
-            "AI Summary",
-            "Extracted Tables",
-            "Structured Data",
-            "Export",
-            "Chat with Document",
-            "Email Report"
-        ]
-        tabs = st.tabs(tab_titles)
-
-        with tabs[0]:
-            st.markdown("### Extracted Document (Markdown)")
-            with st.expander("View Full Output", expanded=True):
-                st.markdown('<div class="scroll-box markdown-body">', unsafe_allow_html=True)
-                st.markdown(markdown_text)
-                st.markdown('</div>', unsafe_allow_html=True)
-
-        with tabs[1]:
-            st.markdown("### AI-Generated Summary")
-            if st.session_state.ai_summary:
-                st.markdown(st.session_state.ai_summary)
-                if st.button("Regenerate Summary", key="regen_summary"):
-                    st.session_state.ai_summary = None
+    with tabs[1]:
+        st.subheader("AI-Generated Summary")
+        if st.session_state.ai_summary:
+            st.markdown(st.session_state.ai_summary)
+        else:
+            st.info("No AI summary available for this document.")
+        if st.button("Regenerate Summary", use_container_width=True, type="primary"):
+            with st.spinner("Regenerating summary..."):
+                try:
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    response = model.generate_content(f"Provide a concise, professional summary of the document:\n\n{st.session_state.markdown_text}")
+                    st.session_state.ai_summary = response.text
                     st.rerun()
-            else:
-                st.info("Click the button below to generate a summary of the document.")
-                if st.button("Generate Summary", use_container_width=True, type="primary"):
-                    with st.spinner("Generating summary..."):
-                        try:
-                            model = genai.GenerativeModel('gemini-1.5-flash')
-                            prompt = f"""
-                            You are an expert summarizer. Your task is to provide a concise, professional summary of the following document content.
+                except Exception as e:
+                    st.error(f"Summary generation failed: {e}")
 
-                            Instructions:
-                            1. Read the entire document content carefully.
-                            2. Identify the main topic and purpose of the document.
-                            3. Extract the 3-5 most important key points, findings, or conclusions.
-                            4. Present the summary in a clean, easy-to-read format. Start with a brief overview paragraph, followed by a bulleted list of the key points.
-                            5. Ensure the summary is objective and accurately reflects the source material.
+    with tabs[2]:
+        st.subheader("Extracted Tables")
+        if st.session_state.json_tables:
+            for i, df in enumerate(st.session_state.json_tables):
+                st.markdown(f"**Table {i+1}**")
+                st.dataframe(df, use_container_width=True)
+                c1, c2 = st.columns(2)
+                c1.download_button(f"Download Table {i+1} as CSV", df.to_csv(index=False).encode('utf-8'), f"{st.session_state.filename}_table_{i+1}.csv", "text/csv", use_container_width=True, key=f"csv_{i}")
+                c2.download_button(f"Download Table {i+1} as Excel", to_excel([df]), f"{st.session_state.filename}_table_{i+1}.xlsx", use_container_width=True, key=f"excel_{i}")
+        else:
+            st.info("No tables were found in the document.")
 
-                            Document Content:
-                            ```
-                            {markdown_text}
-                            ```
-                            """
-                            response = model.generate_content(prompt)
-                            summary_text = response.text.strip()
-                            st.session_state.ai_summary = summary_text
-                            st.rerun()
-                        except Exception as e:
-                            st.info(f"Could not generate summary: {str(e)}")
+    with tabs[3]:
+        st.subheader("Document Structure Overview")
+        stats = get_summary_stats(st.session_state.json_data)
+        items = list(stats.items())
+        for i in range(0, len(items), 4):
+            cols = st.columns(4)
+            for j, col in enumerate(cols):
+                if (i + j) < len(items):
+                    label, value = items[i+j]
+                    col.metric(label=label, value=value)
+        with st.expander("Show Full JSON Structure"):
+            st.json(st.session_state.json_data)
 
-        with tabs[2]:
-            st.markdown("### Extracted Tables")
-            if st.session_state.json_tables:
-                tables = st.session_state.json_tables
-                st.success(f"Displaying {len(tables)} table(s) found in the document.")
-                for i, df in enumerate(tables):
-                    st.markdown(f"---")
-                    st.markdown(f"#### Table {i+1}")
-                    st.dataframe(df)
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        csv_data = df.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            label=f"Download Table {i+1} as CSV",
-                            data=csv_data,
-                            file_name=f"{filename}_table_{i+1}.csv",
-                            mime='text/csv',
-                            use_container_width=True,
-                            key=f"csv_{i}"
-                        )
-                    with col2:
-                        excel_data = to_excel([df])
-                        st.download_button(
-                            label=f"Download Table {i+1} as Excel",
-                            data=excel_data,
-                            file_name=f"{filename}_table_{i+1}.xlsx",
-                            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                            use_container_width=True,
-                            key=f"excel_{i}"
-                        )
-            else:
-                st.info("No tables were identified in the document's JSON structure.")
+    with tabs[4]:
+        st.subheader("Download Full Results")
+        c1, c2 = st.columns(2)
+        c1.download_button("Download Markdown (.md)", st.session_state.markdown_text, f"{st.session_state.filename}.md", "text/markdown", use_container_width=True, type="primary")
+        c2.download_button("Download JSON (.json)", json.dumps(st.session_state.json_data, indent=2), f"{st.session_state.filename}.json", "application/json", use_container_width=True, type="primary")
+        st.divider()
+        st.subheader("Translate Document")
+        lang_map = {"Hindi": "hi", "Tamil": "ta", "Telugu": "te", "French": "fr", "Spanish": "es", "German": "de"}
+        target_lang_name = st.selectbox("Select language", lang_map.keys())
+        if st.button(f"Translate to {target_lang_name}", use_container_width=True):
+            with st.spinner(f"Translating..."):
+                try:
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    lang_code = lang_map[target_lang_name]
+                    prompt = f"Translate the following text into {target_lang_name} ({lang_code}). Preserve all markdown formatting. Only return the translated text.\n\n{st.session_state.markdown_text}"
+                    response = model.generate_content(prompt)
+                    translated_text = response.text
+                    if st.session_state.current_doc_key:
+                        st.session_state.document_history[st.session_state.current_doc_key]["translations"][lang_code] = translated_text
+                    st.success("Translation complete!")
+                    st.markdown(translated_text)
+                    st.download_button("Download Translated Version", translated_text, f"{st.session_state.filename}_{lang_code}.md", use_container_width=True)
+                except Exception as e:
+                    st.error(f"Translation failed: {e}")
 
-        with tabs[3]:
-            st.markdown("### JSON Structure")
-            with st.expander("Show Full JSON", expanded=False):
-                st.markdown('<div class="scroll-box">', unsafe_allow_html=True)
-                st.json(json_data)
-                st.markdown('</div>', unsafe_allow_html=True)
-            st.markdown("##### Content Summary")
-            stats = get_summary_stats(json_data)
-            items = list(stats.items())
-            for i in range(0, len(items), 4):
-                cols = st.columns(4)
-                for j in range(4):
-                    idx = i + j
-                    if idx < len(items):
-                        label, value = items[idx]
-                        cols[j].metric(label=label, value=value)
-            total_elements = sum(stats.values())
-            st.caption(f"Total content blocks detected: {total_elements}")
-
-        with tabs[4]:
-            st.markdown("### Download Results")
-            json_str = json.dumps(json_data, indent=2, ensure_ascii=False)
-            markdown_str = markdown_text
-            col1, col2 = st.columns(2)
-            with col1:
-                st.download_button(
-                    "Download JSON",
-                    json_str,
-                    f"{filename}.json",
-                    "application/json",
-                    use_container_width=True
-                )
-            with col2:
-                st.download_button(
-                    "Download Markdown",
-                    markdown_str,
-                    f"{filename}.md",
-                    "text/markdown",
-                    use_container_width=True
-                )
-            st.markdown("### Translate & Export")
-            target_lang = st.selectbox(
-                "Select Language",
-                ["Hindi", "Tamil", "Telugu", "French", "Spanish", "German", "Arabic"],
-                key="trans_lang"
-            )
-            lang_code_map = {
-                "Hindi": "hi", "Tamil": "ta", "Telugu": "te",
-                "French": "fr", "Spanish": "es", "German": "de", "Arabic": "ar"
-            }
-            lang_code = lang_code_map[target_lang]
-            if st.button(f"Translate to {target_lang}", key="trans_btn"):
-                with st.spinner(f"Translating to {target_lang}..."):
+    with tabs[5]:
+        st.subheader("Chat with Document")
+        for msg in st.session_state.chat_history:
+            st.chat_message(msg["role"]).write(msg["content"])
+        if prompt := st.chat_input("Ask a question about the document..."):
+            st.session_state.chat_history.append({"role": "user", "content": prompt})
+            st.chat_message("user").write(prompt)
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
                     try:
                         model = genai.GenerativeModel('gemini-1.5-flash')
-                        prompt = f"""
-                        You are a professional document translator.
-                        Translate the following Markdown content into {target_lang} ({lang_code}).
-                        Preserve ALL structure exactly:
-                        - Headings (#, ##, ###)
-                        - Lists (- or 1.)
-                        - Tables (format with |)
-                        - Code blocks
-                        - Emphasis (**bold**, *italic*)
-
-                        Return ONLY the translated Markdown.
-                        Do NOT add explanations, comments, or formatting notes.
-
-                        Content to translate:
-                        ```
-                        {markdown_text}
-                        ```
-                        """
-                        response = model.generate_content(prompt)
-                        translated_md = response.text.strip()
-                        if not translated_md or len(translated_md) < 5:
-                            raise Exception("Empty or invalid translation received")
-                        st.session_state.document_history[filename]["translated"][lang_code] = translated_md
-                        st.success("Translation complete!")
-                        st.download_button(
-                            f"Download {target_lang} Markdown",
-                            translated_md,
-                            f"{filename}_{lang_code}.md",
-                            "text/markdown",
-                            use_container_width=True,
-                            key=f"download_trans_{lang_code}_{filename}"
-                        )
-                        with st.expander("Preview Translated Document"):
-                            st.markdown('<div class="scroll-box markdown-body">', unsafe_allow_html=True)
-                            st.markdown(translated_md)
-                            st.markdown('</div>', unsafe_allow_html=True)
+                        response = model.generate_content(f"Based on this document:\n{st.session_state.markdown_text}\n\nAnswer this question: {prompt}")
+                        answer = response.text
+                        st.write(answer)
+                        st.session_state.chat_history.append({"role": "assistant", "content": answer})
                     except Exception as e:
-                        st.info(f"Translation failed: {str(e)}")
+                        st.error(f"Could not get answer: {e}")
 
-        with tabs[5]:
-            st.markdown("### Ask About This Document")
-            for msg in st.session_state.chat_history:
-                with st.chat_message(msg["role"]):
-                    st.write(msg["content"])
-            user_input = st.chat_input("Ask a question about this document...")
-            if user_input:
-                with st.chat_message("user"):
-                    st.write(user_input)
-                with st.chat_message("assistant"):
-                    with st.spinner("Thinking..."):
-                        try:
-                            model = genai.GenerativeModel('gemini-1.5-flash')
-                            response = model.generate_content([
-                                f"{user_input}, Answer based only on this document. Be concise.\n\nDocument:\n{markdown_text}",
-                                user_input
-                            ])
-                            answer = response.text
-                        except Exception as e:
-                            answer = f"Error: {str(e)}"
-                st.write(answer)
-                st.session_state.chat_history.append({"role": "user", "content": user_input})
-                st.session_state.chat_history.append({"role": "assistant", "content": answer})
-            if st.button("Clear Chat"):
-                st.session_state.chat_history = []
-                st.rerun()
-
-        # This is the final code for your Email Report tab (e.g., with tabs[6]:)
-
-        with tabs[6]:
-            st.markdown("### 📧 Email Report")
+    with tabs[6]:
+            st.markdown("### Email Report")
             st.info("Select the content you wish to send and enter the recipient's details below.")
 
             with st.form("email_form"):
@@ -491,105 +490,25 @@ if "json_data" in st.session_state:
                                     st.error(message)
 
 # -----------------------------
-# SESSION STATE INITIALIZATION
-# -----------------------------
-if "json_data" not in st.session_state:
-    st.session_state.json_data = None
-if "markdown_text" not in st.session_state:
-    st.session_state.markdown_text = None
-if "filename" not in st.session_state:
-    st.session_state.filename = None
-if "ai_summary" not in st.session_state:
-    st.session_state.ai_summary = None
-if "json_tables" not in st.session_state:
-    st.session_state.json_tables = []
-if "document_history" not in st.session_state:
-    st.session_state.document_history = {}
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-
-# -----------------------------
 # SIDEBAR: Document History
 # -----------------------------
-if "document_history" in st.session_state and st.session_state.document_history:
-    with st.sidebar:
-        st.header("Recent Documents")
-        for name, data in reversed(list(st.session_state.document_history.items())):
-            with st.expander(f"{name}"):
-                st.caption(f"{data['timestamp']}")
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.download_button(
-                        "Download JSON",
-                        json.dumps(data["json_data"], indent=2),
-                        f"{name}.json",
-                        "application/json",
-                        use_container_width=True,
-                        key=f"hist_json_{name}"
-                    )
-                with col2:
-                    st.download_button(
-                        "Download Markdown",
-                        data["markdown_text"],
-                        f"{name}.md",
-                        "text/markdown",
-                        use_container_width=True,
-                        key=f"hist_md_{name}"
-                    )
-                if data["translated"]:
-                    st.markdown("Translations:")
-                    for lang_code, trans_text in data["translated"].items():
-                        st.download_button(
-                            f"{lang_code.upper()}",
-                            trans_text,
-                            f"{name}_{lang_code}.md",
-                            "text/markdown",
-                            use_container_width=True,
-                            key=f"trans_{name}_{lang_code}"
-                        )
-
-# -----------------------------
-# BUTTONS AND HOVER: RED ONLY (Streamlit default)
-# -----------------------------
-st.markdown("""
-<style>
-/* General button styles */
-.stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {
-    background: #007bff !important; /* Primary Blue */
-    color: #fff !important;
-    border-radius: 4px !important;
-    border: none !important;
-    font-weight: 500;
-    box-shadow: none !important;
-    transition: background 0.2s;
-}
-
-/* Hover effects for buttons */
-.stButton > button:hover, .stDownloadButton > button:hover, .stFormSubmitButton > button:hover {
-    background: #0056b3 !important; /* Darker Blue on hover */
-    color: #fff !important;
-}
-
-/* Active tab style */
-button[data-baseweb="tab"][aria-selected="true"] {
-    border-bottom-color: #007bff !important; /* Blue underline for the active tab */
-}
-
-/* To change the text color of the active tab (optional) */
-button[data-baseweb="tab"][aria-selected="true"] p {
-    color: #007bff;
-}
-</style>
-""", unsafe_allow_html=True)
+if st.session_state.document_history:
+    st.sidebar.divider()
+    st.sidebar.subheader("Recent Documents")
+    sorted_history = sorted(st.session_state.document_history.items(), key=lambda item: item[1]['timestamp'], reverse=True)
+    for doc_name, data in sorted_history:
+        with st.sidebar.expander(f"{doc_name} ({data['timestamp']})"):
+            st.download_button("JSON", json.dumps(data["json_data"], indent=2), f"{Path(doc_name).stem}.json", use_container_width=True, key=f"hist_json_{doc_name}")
+            st.download_button("Markdown", data["markdown_text"], f"{Path(doc_name).stem}.md", use_container_width=True, key=f"hist_md_{doc_name}")
+            if data.get("translations"):
+                st.markdown("**Translations:**")
+                lang_map_rev = {v: k for k, v in {"Hindi": "hi", "Tamil": "ta", "Telugu": "te", "French": "fr", "Spanish": "es", "German": "de"}.items()}
+                for lang_code, translated_text in data["translations"].items():
+                    lang_name = lang_map_rev.get(lang_code, lang_code.upper())
+                    st.download_button(f"Download ({lang_name})", translated_text, f"{Path(doc_name).stem}_{lang_code}.md", use_container_width=True, key=f"hist_trans_{doc_name}_{lang_code}")
 
 # -----------------------------
 # FOOTER
 # -----------------------------
-st.markdown("---")
-st.markdown(
-    "<p class='footer'>"
-    "IMDU Document Parser &copy; TEAM CODEX"
-    "</p>",
-    unsafe_allow_html=True
-)
-
+st.divider()
+st.caption("<p style='text-align:center;'>© 2025 IMDU Document Parser by TEAM CODEX</p>", unsafe_allow_html=True)
