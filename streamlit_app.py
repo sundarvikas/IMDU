@@ -116,13 +116,12 @@ def auth_ui():
 # -----------------------------
 def load_user_documents(user_id):
     """
-    Loads all documents and their available translations for a user
+    Loads all documents and their available translations/summaries for a user
     and reconstructs the document_history dictionary.
     """
     history_dict = {}
     try:
-        # Fetch all documents for the user
-        docs_response = supabase.table('documents').select('*').eq('user_id', user_id).execute()
+        docs_response = supabase.table('documents').select('*').eq('user_id', user_id).order('created_at', desc=True).execute()
         if not docs_response.data:
             return {}
 
@@ -131,14 +130,14 @@ def load_user_documents(user_id):
             doc_key = doc['doc_name']
             
             history_dict[doc_key] = {
-                "db_id": doc_id, # Store the database ID
+                "db_id": doc_id,
                 "json_data": doc['original_json'],
                 "markdown_text": doc['original_md'],
+                "ai_summary": doc['ai_summary'], # ✅ Load the summary
                 "timestamp": doc['created_at'],
-                "translations": {} # Prepare a placeholder for translations
+                "translations": {}
             }
             
-            # Fetch all translations for this document
             translations_response = supabase.table('translations').select('*').eq('document_id', doc_id).execute()
             if translations_response.data:
                 for trans in translations_response.data:
@@ -150,20 +149,39 @@ def load_user_documents(user_id):
 
     return history_dict
 
+def update_document_summary(doc_id, summary_text):
+    """Updates an existing document record with the AI-generated summary."""
+    try:
+        supabase.table('documents').update({'ai_summary': summary_text}).eq('id', doc_id).execute()
+    except Exception as e:
+        st.error(f"Error updating summary: {e}")
 
-def save_new_document(user_id, doc_name, json_data, markdown_text):
-    """Saves a new document to the database and returns the new record."""
+
+def save_new_document(user_id, doc_name, json_data, markdown_text, ai_summary):
+    """Saves a new document, including its summary, to the database."""
     try:
         response = supabase.table('documents').insert({
             'user_id': user_id,
             'doc_name': doc_name,
             'original_json': json_data,
-            'original_md': markdown_text
+            'original_md': markdown_text,
+            'ai_summary': ai_summary  # ✅ Save the summary at creation
         }).execute()
         return response.data[0]
     except Exception as e:
         st.error(f"Error saving document: {e}")
         return None
+    
+def load_document_to_state(doc_key, doc_data):
+    """Callback function to load a selected historical document into the main app state."""
+    st.session_state.json_data = doc_data.get('json_data')
+    st.session_state.markdown_text = doc_data.get('markdown_text')
+    st.session_state.ai_summary = doc_data.get('ai_summary')
+    st.session_state.filename = Path(doc_key).stem
+    st.session_state.current_doc_key = doc_key
+    st.session_state.json_tables = find_tables_in_json(st.session_state.json_data)
+    # Reset the chat history when loading a new document
+    st.session_state.chat_history = []
 
 def save_translation(document_id, lang_code, translated_text):
     """Saves a new translation for a specific document."""
@@ -308,37 +326,53 @@ if uploaded_file:
             st.info("Preview is not available for this file type.")
 
     if st.button("Parse Document", type="primary", use_container_width=True):
-        with st.spinner("Analyzing document..."):
+        with st.spinner("Processing document and generating summary..."):
             try:
-                # Note: We are not saving files to a local 'output' dir anymore
+                # Step 1: Process the document to get JSON and Markdown
                 json_data, markdown_text = process_document(file_path=str(file_path))
-                st.session_state.update(
-                    json_data=json_data,
-                    markdown_text=markdown_text,
-                    filename=stem,
-                    json_tables=find_tables_in_json(json_data),
-                    ai_summary=None,
-                    chat_history=[]
-                )
-                # --- Inside the "Parse Document" button logic ---
+                
+                # Step 2: Generate the AI summary immediately
+                summary = "" # Default to empty string
+                try:
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    response = model.generate_content(f"Provide a concise summary of the document:\n\n{markdown_text}")
+                    summary = response.text
+                    st.toast("AI summary generated!", icon="🧠")
+                except Exception as e:
+                    st.warning(f"Could not generate AI summary: {e}")
+
+                # Step 3: Save the complete record to the database in one call
                 doc_key = f"{stem}{file_path.suffix}"
-                st.session_state.current_doc_key = doc_key
+                new_doc_record = save_new_document(user.id, doc_key, json_data, markdown_text, summary)
 
-                # Save to DB and get the new record, including its ID
-                new_doc_record = save_new_document(user.id, doc_key, json_data, markdown_text)
-
+                # Step 4: If save is successful, update the session state
                 if new_doc_record:
-                    # Update the session state with the data from the database
+                    st.session_state.update(
+                        json_data=json_data,
+                        markdown_text=markdown_text,
+                        filename=stem,
+                        json_tables=find_tables_in_json(json_data),
+                        ai_summary=summary,
+                        chat_history=[],
+                        current_doc_key=doc_key
+                    )
+                    
+                    # Update the history dictionary with the complete, correct data
                     st.session_state.document_history[doc_key] = {
                         "db_id": new_doc_record['id'],
                         "json_data": new_doc_record['original_json'],
                         "markdown_text": new_doc_record['original_md'],
+                        "ai_summary": new_doc_record['ai_summary'],
                         "timestamp": new_doc_record['created_at'],
                         "translations": {}
                     }
+                    st.toast("Document processed and saved!", icon="✅")
+
             except Exception as e:
-                st.error(f"Processing failed: {str(e)}")
+                st.error(f"A critical error occurred: {str(e)}")
                 st.stop()
+                
+        st.rerun()
 
         with st.spinner("Generating AI summary..."):
             try:
@@ -459,37 +493,83 @@ if st.session_state.get("json_data"):
 
     with tabs[6]:
         st.markdown("### Email Report")
-        with st.form("email_form"):
-            recipient = st.text_input("Recipient's Email", value=user.email)
-            subject = st.text_input("Subject", value=f"Document Analysis: {st.session_state.filename}")
-            include_summary = st.checkbox("Include AI Summary (in email body)", value=True)
-            attach_md = st.checkbox("Attach Markdown File (.md)", value=True)
-            attach_json = st.checkbox("Attach JSON File (.json)")
-            attach_tables = st.checkbox("Attach Extracted Tables (.xlsx)") if st.session_state.json_tables else False
-            custom_message = st.text_area("Custom Message (Optional)")
-            if st.form_submit_button("✉️ Send Email", use_container_width=True):
-                with st.spinner("Sending email..."):
-                    # Logic to prepare and send email is the same...
-                    pass # Your email sending logic here
+        st.info("Compose your email and select attachments to send.")
 
+        with st.form("email_form"):
+            recipient = st.text_input("Recipient's Email", placeholder="name@example.com")
+            subject = st.text_input("Subject", value=f"Analysis of: {st.session_state.filename}", placeholder="Email Subject")
+            
+            st.markdown("**Select content to include:**")
+            include_summary = st.checkbox("Include AI Summary (in email body)", value=False)
+            attach_md = st.checkbox("Attach Markdown File (.md)", value=False)
+            attach_json = st.checkbox("Attach JSON File (.json)", value=False)
+            attach_tables = st.checkbox("Attach Extracted Tables (.xlsx)") if st.session_state.json_tables else False
+            
+            custom_message = st.text_area("Custom Message (Optional)", placeholder="Add a personal note here...")
+            
+            submitted = st.form_submit_button("✉️ Send Email", use_container_width=True)
+
+            if submitted:
+                if not recipient:
+                    st.warning("Please enter a recipient's email address.")
+                else:
+                    with st.spinner("Preparing and sending your email..."):
+                        # --- ✅ THIS IS THE MISSING LOGIC ---
+                        attachment_paths = []
+                        summary_text = st.session_state.ai_summary if include_summary else ""
+
+                        # Use a temporary directory to safely create attachment files
+                        with tempfile.TemporaryDirectory() as temp_dir:
+                            temp_path = Path(temp_dir)
+
+                            if attach_md:
+                                md_path = temp_path / f"{st.session_state.filename}.md"
+                                md_path.write_text(st.session_state.markdown_text, encoding='utf-8')
+                                attachment_paths.append(str(md_path))
+
+                            if attach_json:
+                                json_path = temp_path / f"{st.session_state.filename}.json"
+                                json_path.write_text(json.dumps(st.session_state.json_data, indent=2), encoding='utf-8')
+                                attachment_paths.append(str(json_path))
+
+                            if attach_tables and st.session_state.json_tables:
+                                excel_path = temp_path / f"{st.session_state.filename}_tables.xlsx"
+                                excel_data = to_excel(st.session_state.json_tables)
+                                excel_path.write_bytes(excel_data)
+                                attachment_paths.append(str(excel_path))
+
+                            # Call the email function from email_report.py
+                            success, message = send_report_email(
+                                recipient=recipient,
+                                subject=subject,
+                                custom_message=custom_message,
+                                summary_text=summary_text,
+                                attachment_paths=attachment_paths
+                            )
+
+                            if success:
+                                st.success(message)
+                            else:
+                                st.error(message)
 # -----------------------------
 # SIDEBAR: Document History
 # -----------------------------
 if st.session_state.document_history:
     st.sidebar.divider()
     st.sidebar.subheader("Document History")
+    
+    # Sort history to show the most recent documents first
     sorted_history = sorted(st.session_state.document_history.items(), key=lambda item: item[1]['timestamp'], reverse=True)
+    
     for doc_name, data in sorted_history:
-        with st.sidebar.expander(f"{doc_name} ({data['timestamp']})"):
-            st.download_button("JSON", json.dumps(data["json_data"], indent=2), f"{Path(doc_name).stem}.json", use_container_width=True, key=f"hist_json_{doc_name}")
-            st.download_button("Markdown", data["markdown_text"], f"{Path(doc_name).stem}.md", use_container_width=True, key=f"hist_md_{doc_name}")
-            if data.get("translations"):
-                st.markdown("**Translations:**")
-                lang_map_rev = {v: k for k, v in {"Hindi": "hi", "Tamil": "ta", "Telugu": "te", "French": "fr", "Spanish": "es", "German": "de"}.items()}
-                for lang_code, translated_text in data["translations"].items():
-                    lang_name = lang_map_rev.get(lang_code, lang_code.upper())
-                    st.download_button(f"Download ({lang_name})", translated_text, f"{Path(doc_name).stem}_{lang_code}.md", use_container_width=True, key=f"hist_trans_{doc_name}_{lang_code}")
-
+        # ✅ Create a button for each document. Clicking it loads the state.
+        st.sidebar.button(
+            doc_name,
+            key=f"hist_btn_{doc_name}",
+            on_click=load_document_to_state,
+            args=(doc_name, data),
+            use_container_width=True
+        )
 # -----------------------------
 # FOOTER
 # -----------------------------

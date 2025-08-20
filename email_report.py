@@ -9,16 +9,20 @@ from email import encoders
 from pathlib import Path
 from typing import List
 
-def send_report_email(recipient: str, subject: str, custom_message: str, summary_text: str, attachment_paths: List[str]):
-    """
-    Sends a customizable email with attachments using a Gmail account.
-    This version uses a more robust MIME structure for mixed content.
-    """
-    sender_email = "sundarvikas01@gmail.com"
-    app_password = "rxkkennktixothdy"
+# email_report.py
+import streamlit as st # Import streamlit
+import smtplib
+# ... (rest of your imports)
 
-    if not sender_email or not app_password:
-        return False, "Error: GMAIL_ADDRESS or GMAIL_APP_PASSWORD not set."
+def send_report_email(recipient: str, subject: str, custom_message: str, summary_text: str, attachment_paths: List[str]):
+    # ✅ Securely get credentials from st.secrets
+    try:
+        sender_email = st.secrets["email_credentials"]["address"]
+        app_password = st.secrets["email_credentials"]["password"]
+    except KeyError:
+        return False, "Error: Email credentials not found in secrets.toml"
+
+    # ... (the rest of your function remains exactly the same) ...
 
     # Use the default MIMEMultipart, which is best for mixed text and attachments.
     message = MIMEMultipart()
