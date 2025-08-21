@@ -419,7 +419,18 @@ if st.session_state.get("json_data"):
         if st.session_state.json_tables:
             for i, df in enumerate(st.session_state.json_tables):
                 st.markdown(f"**Table {i+1}**")
-                st.dataframe(df, use_container_width=True)
+
+                # --- ✅ THE FIX ---
+                # Create a copy to avoid modifying the original data in session state
+                df_display = df.copy()
+                # Loop through all columns and convert them to string type for safe display
+                for col in df_display.columns:
+                    df_display[col] = df_display[col].astype(str)
+                
+                # Now, this line will work without errors
+                st.dataframe(df_display, use_container_width=True)
+                
+                # --- Your download buttons can still use the original df ---
                 c1, c2 = st.columns(2)
                 c1.download_button(f"Download Table {i+1} as CSV", df.to_csv(index=False).encode('utf-8'), f"{st.session_state.filename}_table_{i+1}.csv", "text/csv", use_container_width=True, key=f"csv_{i}")
                 c2.download_button(f"Download Table {i+1} as Excel", to_excel([df]), f"{st.session_state.filename}_table_{i+1}.xlsx", use_container_width=True, key=f"excel_{i}")
