@@ -86,8 +86,8 @@ def auth_ui():
                         st.sidebar.error("Login failed: Incorrect email or password.")
         elif auth_option == "Sign Up":
             with st.sidebar.form("signup_form"):
-                email = st.text_input("Email")
                 username = st.text_input("Username")
+                email = st.text_input("Email")
                 password = st.text_input("Password", type="password")
                 if st.form_submit_button("Sign Up", type="primary", use_container_width=True):
                     if not username:
