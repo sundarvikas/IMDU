@@ -8,8 +8,6 @@ from io import BytesIO
 import tempfile
 import fitz  # PyMuPDF
 from supabase import create_client, Client
-import subprocess
-import os
 
 # --- Import Custom Modules ---
 try:
@@ -23,8 +21,15 @@ try:
 except Exception as e:
     st.error(f"Error loading pipeline: {e}")
     st.stop()
+# ✅ Import docx2pdf
+try:
+    from docx2pdf import convert
+except ImportError:
+    def convert(*args, **kwargs):
+        st.error("`docx2pdf` library not found. Please run `pip install docx2pdf`.")
+        return None
 
-# --- Message Handler (shows messages after a rerun) ---
+# --- Message Handler ---
 if "message" in st.session_state and st.session_state.message:
     st.toast(st.session_state.message, icon="✅")
     st.session_state.message = None
@@ -35,7 +40,7 @@ if "message" in st.session_state and st.session_state.message:
 st.set_page_config(
     page_title="IMDU Document Parser",
     page_icon="📄",
-    initial_sidebar_state="expanded"  # This line makes the sidebar open on load
+    initial_sidebar_state="expanded"
 )
 
 # -----------------------------
@@ -52,6 +57,8 @@ supabase = init_connection()
 # -----------------------------
 # APP FUNCTIONS
 # -----------------------------
+# (All functions like auth_ui, load_user_documents, save_new_document, etc., remain the same)
+# ...
 def auth_ui():
     """Handles session restoration and the user authentication UI."""
     if 'user' not in st.session_state:
@@ -228,25 +235,7 @@ def get_summary_stats(json_data: dict) -> dict:
         st.warning(f"Error parsing JSON structure for stats: {str(e)}")
     return type_counts
 
-def convert_to_pdf(input_path: Path, output_dir: Path):
-    """Converts a file to PDF using a direct path to LibreOffice on Windows."""
-    if os.name == 'nt':
-        libreoffice_path = "C:/Program Files/LibreOffice/program/soffice.exe"
-    else:
-        libreoffice_path = "libreoffice"
-    try:
-        subprocess.run(
-            [libreoffice_path, "--headless", "--convert-to", "pdf", "--outdir", str(output_dir), str(input_path)],
-            check=True, timeout=30.0
-        )
-        pdf_path = output_dir / f"{input_path.stem}.pdf"
-        return pdf_path if pdf_path.exists() else None
-    except FileNotFoundError:
-        st.error(f"Error: Could not find LibreOffice. Please ensure it's installed at the path: '{libreoffice_path}'")
-        return None
-    except Exception as e:
-        st.error(f"Error during DOCX to PDF conversion: {e}")
-        return None
+# --- The LibreOffice convert_to_pdf function has been removed ---
 
 # -----------------------------
 # SESSION STATE INITIALIZATION
@@ -301,14 +290,18 @@ if uploaded_file:
     
     if not st.session_state.get('file_path_for_processing'):
         st.success(f"`{uploaded_file.name}` uploaded successfully.")
+        
+        # ✅ --- MODIFIED LOGIC: Using docx2pdf ---
         if original_file_path.suffix.lower() == ".docx":
-            with st.spinner("Converting DOCX to PDF for analysis..."):
-                pdf_path = convert_to_pdf(original_file_path, uploads_dir)
-                if pdf_path:
+            st.warning("`.docx` processing uses `docx2pdf` and is only supported on Windows with Microsoft Word installed. This will fail on deployment.")
+            with st.spinner("Converting DOCX to PDF..."):
+                try:
+                    pdf_path = original_file_path.with_suffix(".pdf")
+                    convert(str(original_file_path), str(pdf_path))
                     st.session_state.file_path_for_processing = pdf_path
                     st.info("DOCX file converted successfully.")
-                else:
-                    st.error("Failed to convert DOCX file.")
+                except Exception as e:
+                    st.error(f"Failed to convert DOCX file: {e}")
                     st.stop()
         else:
             st.session_state.file_path_for_processing = original_file_path
@@ -506,7 +499,6 @@ if st.session_state.get("json_data"):
                                 excel_data = to_excel(st.session_state.json_tables)
                                 excel_path.write_bytes(excel_data)
                                 attachment_paths.append(str(excel_path))
-
                             success, message = send_report_email(
                                 recipient=recipient, subject=subject, custom_message=custom_message,
                                 summary_text=summary_text, attachment_paths=attachment_paths
@@ -520,14 +512,10 @@ if st.session_state.get("json_data"):
 if st.session_state.document_history:
     st.sidebar.divider()
     st.sidebar.subheader("Document History")
-    
-    # Use the in-sidebar delete confirmation logic
     sorted_history = sorted(st.session_state.document_history.items(), key=lambda item: item[1]['timestamp'], reverse=True)
-    
     for doc_name, data in sorted_history:
         doc_to_delete = st.session_state.get('doc_to_delete')
         is_pending_delete = (doc_to_delete is not None) and (doc_to_delete['name'] == doc_name)
-
         with st.sidebar.expander(doc_name, expanded=is_pending_delete):
             if is_pending_delete:
                 st.warning("Are you sure?")
