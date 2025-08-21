@@ -322,7 +322,7 @@ if uploaded_file:
                 doc = fitz.open(file_path_for_processing)
                 page = doc.load_page(0)
                 pix = page.get_pixmap(dpi=96)
-                st.image(pix.tobytes("png"), caption="Page 1 Preview", use_column_width=True)
+                st.image(pix.tobytes("png"), caption="Page 1 Preview", use_container_width=True)
             except Exception as e:
                 st.warning(f"Could not generate document preview: {e}")
 
