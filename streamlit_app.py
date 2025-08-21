@@ -100,7 +100,7 @@ def auth_ui():
     else:
         user = st.session_state.user
         st.sidebar.subheader("Welcome")
-        st.sidebar.markdown(f"**{user.email}**")
+        st.sidebar.markdown(f"{user.email}")
         if st.sidebar.button("Logout", use_container_width=True):
             supabase.auth.sign_out()
             for key in st.session_state.keys():
@@ -300,7 +300,7 @@ if uploaded_file:
         f.write(uploaded_file.getbuffer())
     
     if not st.session_state.get('file_path_for_processing'):
-        st.success(f"`{uploaded_file.name}` uploaded successfully.")
+        st.success(f"{uploaded_file.name} uploaded successfully.")
         if original_file_path.suffix.lower() == ".docx":
             with st.spinner("Converting DOCX to PDF for analysis..."):
                 pdf_path = convert_to_pdf(original_file_path, uploads_dir)
@@ -322,7 +322,7 @@ if uploaded_file:
                 doc = fitz.open(file_path_for_processing)
                 page = doc.load_page(0)
                 pix = page.get_pixmap(dpi=96)
-                st.image(pix.tobytes("png"), caption="Page 1 Preview", use_column_width=True)
+                st.image(pix.tobytes("png"), caption="Page 1 Preview", use_container_width=True)
             except Exception as e:
                 st.warning(f"Could not generate document preview: {e}")
 
@@ -395,7 +395,7 @@ if st.session_state.get("json_data"):
         st.subheader("Extracted Tables")
         if st.session_state.json_tables:
             for i, df in enumerate(st.session_state.json_tables):
-                st.markdown(f"**Table {i+1}**")
+                st.markdown(f"*Table {i+1}*")
                 try:
                     df_display = df.copy()
                     df_display = clean_dataframe_columns(df_display)
@@ -406,8 +406,8 @@ if st.session_state.get("json_data"):
                     st.write("Original DataFrame with potential issues:", df)
 
                 c1, c2 = st.columns(2)
-                c1.download_button(f"Download Table {i+1} as CSV", df.to_csv(index=False).encode('utf-8'), f"{st.session_state.filename}_table_{i+1}.csv", "text/csv", use_container_width=True, key=f"csv_{i}")
-                c2.download_button(f"Download Table {i+1} as Excel", to_excel([df]), f"{st.session_state.filename}_table_{i+1}.xlsx", use_container_width=True, key=f"excel_{i}")
+                c1.download_button(f"Download Table {i+1} as CSV", df.to_csv(index=False).encode('utf-8'), f"{st.session_state.filename}table{i+1}.csv", "text/csv", use_container_width=True, key=f"csv_{i}")
+                c2.download_button(f"Download Table {i+1} as Excel", to_excel([df]), f"{st.session_state.filename}table{i+1}.xlsx", use_container_width=True, key=f"excel_{i}")
         else:
             st.info("No tables were found in the document.")
 
@@ -477,13 +477,13 @@ if st.session_state.get("json_data"):
         with st.form("email_form"):
             recipient = st.text_input("Recipient's Email", placeholder="name@example.com")
             subject = st.text_input("Subject", value=f"Document Analysis: {st.session_state.filename}")
-            st.markdown("**Select content to include:**")
+            st.markdown("*Select content to include:*")
             include_summary = st.checkbox("Include AI Summary (in email body)", value=False)
             attach_md = st.checkbox("Attach Markdown File (.md)", value=False)
             attach_json = st.checkbox("Attach JSON File (.json)", value=False)
             attach_tables = st.checkbox("Attach Extracted Tables (.xlsx)") if st.session_state.json_tables else False
             custom_message = st.text_area("Custom Message (Optional)", placeholder="Add a personal note here...")
-            submitted = st.form_submit_button("✉️ Send Email", use_container_width=True)
+            submitted = st.form_submit_button("✉ Send Email", use_container_width=True)
             if submitted:
                 if not recipient:
                     st.warning("Please enter a recipient's email address.")
