@@ -418,19 +418,30 @@ if st.session_state.get("json_data"):
         st.subheader("Extracted Tables")
         if st.session_state.json_tables:
             for i, df in enumerate(st.session_state.json_tables):
-                st.markdown(f"**Table {i+1}**")
+                st.markdown(f"**--- Debugging Table {i+1} ---**")
+                
+                # --- ✅ ADD THIS DEBUGGING BLOCK ---
+                try:
+                    # 1. Check for duplicate columns
+                    if df.columns.duplicated().any():
+                        st.warning(f"Warning: Table {i+1} has duplicate column names. This is a likely cause of the error.")
+                        st.write("Duplicate Columns:", df.columns[df.columns.duplicated()].tolist())
 
-                # --- ✅ THE FIX ---
-                # Create a copy to avoid modifying the original data in session state
-                df_display = df.copy()
-                # Loop through all columns and convert them to string type for safe display
-                for col in df_display.columns:
-                    df_display[col] = df_display[col].astype(str)
-                
-                # Now, this line will work without errors
-                st.dataframe(df_display, use_container_width=True)
-                
-                # --- Your download buttons can still use the original df ---
+                    # 2. Print the DataFrame's info
+                    st.write(f"**Table {i+1} Info:**")
+                    st.write("Column Names:", df.columns.tolist())
+                    st.write("Data Types:", df.dtypes.to_dict())
+                    
+                    # 3. Attempt to display the table after converting to string
+                    st.markdown(f"**Table {i+1} (Cleaned for Display)**")
+                    st.dataframe(df.astype(str), use_container_width=True)
+
+                except Exception as e:
+                    st.error(f"An error occurred while trying to display Table {i+1}: {e}")
+                    st.write("Problematic DataFrame head:", df.head())
+
+                # --- Your original download buttons ---
+                st.markdown("---") # Separator
                 c1, c2 = st.columns(2)
                 c1.download_button(f"Download Table {i+1} as CSV", df.to_csv(index=False).encode('utf-8'), f"{st.session_state.filename}_table_{i+1}.csv", "text/csv", use_container_width=True, key=f"csv_{i}")
                 c2.download_button(f"Download Table {i+1} as Excel", to_excel([df]), f"{st.session_state.filename}_table_{i+1}.xlsx", use_container_width=True, key=f"excel_{i}")
