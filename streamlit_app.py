@@ -35,8 +35,7 @@ if "message" in st.session_state and st.session_state.message:
 st.set_page_config(
     page_title="IMDU Document Parser",
     page_icon="📄",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded"  # This line makes the sidebar open on load
 )
 
 # -----------------------------
@@ -534,7 +533,7 @@ if st.session_state.document_history:
                 st.warning("Are you sure?")
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("✅ Confirm", key=f"confirm_del_{doc_name}", use_container_width=True, type="primary"):
+                    if st.button("Confirm", key=f"confirm_del_{doc_name}", use_container_width=True, type="primary"):
                         doc_db_id = doc_to_delete['data'].get('db_id')
                         success, message = delete_document(doc_db_id)
                         if success:
@@ -548,7 +547,7 @@ if st.session_state.document_history:
                         else:
                             st.error(message)
                 with col2:
-                    if st.button("❌ Cancel", key=f"cancel_del_{doc_name}", use_container_width=True):
+                    if st.button("Cancel", key=f"cancel_del_{doc_name}", use_container_width=True):
                         st.session_state.doc_to_delete = None
                         st.rerun()
             else:
