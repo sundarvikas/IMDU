@@ -522,7 +522,10 @@ if st.session_state.get("json_data"):
 if st.session_state.document_history:
     st.sidebar.divider()
     st.sidebar.subheader("Document History")
+    search_query = st.sidebar.text_input("Search history...", key="history_search")
     sorted_history = sorted(st.session_state.document_history.items(), key=lambda item: item[1]['timestamp'], reverse=True)
+    if search_query:
+        sorted_history = [(doc_name, data) for doc_name, data in sorted_history if search_query.lower() in doc_name.lower()]
     for doc_name, data in sorted_history:
         doc_to_delete = st.session_state.get('doc_to_delete')
         is_pending_delete = (doc_to_delete is not None) and (doc_to_delete['name'] == doc_name)
