@@ -194,7 +194,22 @@ def save_translation(document_id, lang_code, translated_text):
         }, on_conflict='document_id, language_code').execute()
     except Exception as e:
         st.error(f"Error saving translation: {e}")
-
+def clean_dataframe_columns(df):
+    """
+    Finds and renames duplicate column names in a DataFrame by appending a suffix.
+    e.g., ['A', 'B', 'A'] becomes ['A', 'B', 'A_2']
+    """
+    new_columns = []
+    seen_columns = {}
+    for col in df.columns:
+        if col in seen_columns:
+            seen_columns[col] += 1
+            new_columns.append(f"{col}_{seen_columns[col]}")
+        else:
+            seen_columns[col] = 0
+            new_columns.append(col)
+    df.columns = new_columns
+    return df
 # -----------------------------
 # SESSION STATE INITIALIZATION
 # -----------------------------
@@ -418,30 +433,27 @@ if st.session_state.get("json_data"):
         st.subheader("Extracted Tables")
         if st.session_state.json_tables:
             for i, df in enumerate(st.session_state.json_tables):
-                st.markdown(f"**--- Debugging Table {i+1} ---**")
+                st.markdown(f"**Table {i+1}**")
                 
-                # --- ✅ ADD THIS DEBUGGING BLOCK ---
                 try:
-                    # 1. Check for duplicate columns
-                    if df.columns.duplicated().any():
-                        st.warning(f"Warning: Table {i+1} has duplicate column names. This is a likely cause of the error.")
-                        st.write("Duplicate Columns:", df.columns[df.columns.duplicated()].tolist())
-
-                    # 2. Print the DataFrame's info
-                    st.write(f"**Table {i+1} Info:**")
-                    st.write("Column Names:", df.columns.tolist())
-                    st.write("Data Types:", df.dtypes.to_dict())
+                    # --- ✅ FINAL FIX ---
+                    # 1. Create a copy to work with
+                    df_display = df.copy()
                     
-                    # 3. Attempt to display the table after converting to string
-                    st.markdown(f"**Table {i+1} (Cleaned for Display)**")
-                    st.dataframe(df.astype(str), use_container_width=True)
+                    # 2. Clean the column names to remove duplicates
+                    df_display = clean_dataframe_columns(df_display)
+                    
+                    # 3. Convert all data to strings for safe display
+                    df_display = df_display.astype(str)
+
+                    # This should now display without errors
+                    st.dataframe(df_display, use_container_width=True)
 
                 except Exception as e:
-                    st.error(f"An error occurred while trying to display Table {i+1}: {e}")
-                    st.write("Problematic DataFrame head:", df.head())
+                    st.error(f"Could not display Table {i+1} even after cleaning. Error: {e}")
+                    st.write("Original DataFrame with potential issues:", df)
 
-                # --- Your original download buttons ---
-                st.markdown("---") # Separator
+                # --- Download buttons can use the original, unmodified df ---
                 c1, c2 = st.columns(2)
                 c1.download_button(f"Download Table {i+1} as CSV", df.to_csv(index=False).encode('utf-8'), f"{st.session_state.filename}_table_{i+1}.csv", "text/csv", use_container_width=True, key=f"csv_{i}")
                 c2.download_button(f"Download Table {i+1} as Excel", to_excel([df]), f"{st.session_state.filename}_table_{i+1}.xlsx", use_container_width=True, key=f"excel_{i}")
