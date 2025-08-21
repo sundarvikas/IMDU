@@ -1,0 +1,85 @@
+{
+  "document": {
+    "doc-name": "Easter - Made with PosterMyWall (4).jpg",
+    "pages": [
+      {
+        "page_index": 1,
+        "blocks": [
+          {
+            "id": "b1",
+            "type": "image",
+            "content": "AN IMAGE OF Jesus riding a donkey",
+            "bbox": [
+              0,
+              0,
+              0.5,
+              1
+            ],
+            "languages": [],
+            "overall_confidence": 1.0
+          },
+          {
+            "id": "b2",
+            "type": "header",
+            "content": "THE CENTENARY TELUGU BAPTIST CHURCH",
+            "bbox": [
+              0.6,
+              0.1,
+              0.9,
+              0.2
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          },
+          {
+            "id": "b3",
+            "type": "section_header",
+            "content": "Palm\nSUNDAY\nCHURCH\nSERVICE",
+            "bbox": [
+              0.4,
+              0.5,
+              0.7,
+              0.7
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.98
+          },
+          {
+            "id": "b4",
+            "type": "text",
+            "content": "APRIL. 13TH 2025\n10:30AM TO 1:00PM\nBATWADIPALEM, NELLORE - 524003",
+            "bbox": [
+              0.7,
+              0.5,
+              0.85,
+              0.8
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.97
+          },
+          {
+            "id": "b5",
+            "type": "text",
+            "content": "Pastor.\nRev. V. Hari Paul Garu",
+            "bbox": [
+              0.85,
+              0.5,
+              0.95,
+              0.8
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.96
+          }
+        ]
+      }
+    ]
+  }
+}

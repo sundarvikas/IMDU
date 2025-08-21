@@ -11,10 +11,11 @@ PyMuPDF
 python-docx
 Pillow
 openpyxl
-camelot-py[cv]
+camelot-py
+opencv-python-headless  # Dependency for Camelot
 
-# Optional (if used by your email_report.py)
-resend
+# For Email Functionality
+# resend # Uncomment if your email_report.py uses this service
 
-# Optional (if your pipeline uses it)
+# For local Windows development ONLY
 docx2pdf

@@ -86,14 +86,35 @@ def auth_ui():
                         st.sidebar.error("Login failed: Incorrect email or password.")
         elif auth_option == "Sign Up":
             with st.sidebar.form("signup_form"):
+                username = st.text_input("Username")
                 email = st.text_input("Email")
                 password = st.text_input("Password", type="password")
+                
                 if st.form_submit_button("Sign Up", type="primary", use_container_width=True):
-                    try:
-                        supabase.auth.sign_up({"email": email, "password": password})
-                        st.sidebar.success("Account created! Please check your email to verify.")
-                    except Exception as e:
-                        st.sidebar.error(f"Sign up failed: {e}")
+                    if not username:
+                        st.sidebar.error("Username cannot be empty.")
+                    else:
+                        try:
+                            # ✅ 1. Capture the session object returned by sign_up
+                            session = supabase.auth.sign_up({
+                                "email": email, 
+                                "password": password,
+                                "options": {
+                                    "data": {"username": username}
+                                }
+                            })
+                            
+                            # ✅ 2. If signup was successful, a user object will be returned
+                            if session.user:
+                                # ✅ 3. Manually set the session state to log the user in
+                                st.session_state.user = session.user
+                                st.sidebar.success("Account created successfully!")
+                                
+                                # ✅ 4. Rerun the app to show the main page
+                                st.rerun()
+
+                        except Exception as e:
+                            st.sidebar.error(f"Sign up failed: {e}")
         elif auth_option == "Forgot Password":
             with st.sidebar.form("reset_password_form"):
                 email = st.text_input("Enter your email address")
@@ -104,17 +125,66 @@ def auth_ui():
                     except Exception as e:
                         st.sidebar.error(f"Failed to send reset link: {e}")
         return None
-    else:
+    else: # If user is logged in
         user = st.session_state.user
         st.sidebar.subheader("Welcome")
-        st.sidebar.markdown(f"**{user.email}**")
+
+        # Get display name: try username, fall back to email
+        display_name = user.user_metadata.get("username", user.email)
+        
+        # ✅ Convert the display name to uppercase before showing it
+        st.sidebar.markdown(f"**{display_name.upper()}**")
+        
         if st.sidebar.button("Logout", use_container_width=True):
             supabase.auth.sign_out()
             for key in st.session_state.keys():
                 del st.session_state[key]
             st.rerun()
         return user
+from PIL import Image # Add this import at the top of your file
 
+@st.cache_data
+def get_page_image(file_path, page_number):
+    """Opens a document and returns a specific page as a Pillow Image object."""
+    try:
+        doc = fitz.open(file_path)
+        page = doc.load_page(page_number - 1)  # page_index is 1-based, fitz is 0-based
+        pix = page.get_pixmap(dpi=200) # Higher DPI for better quality crops
+        return Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+    except Exception as e:
+        st.error(f"Error getting page image: {e}")
+        return None
+def extract_and_crop_images(json_data, file_path):
+    """Finds all image/figure blocks in the JSON and crops them from the document."""
+    cropped_images = []
+    if not isinstance(json_data, dict):
+        return cropped_images
+
+    for page in json_data.get("document", {}).get("pages", []):
+        page_index = page.get("page_index")
+        page_image = get_page_image(file_path, page_index)
+
+        if page_image:
+            img_width, img_height = page_image.size
+            for i, block in enumerate(page.get("blocks", [])):
+                # Look for the types you defined for visual elements in your prompt
+                if block.get("type") in ["figure_description", "image"]:
+                    bbox = block.get("bbox")
+                    if bbox:
+                        # Convert normalized bbox to pixel coordinates
+                        left = int(bbox[0] * img_width)
+                        top = int(bbox[1] * img_height)
+                        right = int(bbox[2] * img_width)
+                        bottom = int(bbox[3] * img_height)
+
+                        # Crop the image using Pillow
+                        cropped_img = page_image.crop((left, top, right, bottom))
+                        
+                        # Get the description from the content field
+                        description = block.get("content", f"Image {i+1} from page {page_index}")
+                        cropped_images.append((description, cropped_img))
+
+    return cropped_images
 def load_user_documents(user_id):
     """Loads all documents for a user in an optimized way (2 queries)."""
     history_dict = {}
@@ -169,6 +239,19 @@ def load_document_to_state(doc_key, doc_data):
     st.session_state.json_tables = find_tables_in_json(st.session_state.json_data)
     st.session_state.chat_history = []
 
+    # --- ✅ THE FIX IS HERE ---
+    # Reconstruct the path to the processed file for the cropping feature.
+    # This ensures the "Embedded Content" tab works for historical documents.
+    uploads_dir = Path("uploads")
+    original_file_path = uploads_dir / doc_key
+    
+    if original_file_path.suffix.lower() == ".docx":
+        # If the original file was a docx, the processed file is the converted PDF.
+        # Note: This assumes the converted PDF still exists in the 'uploads' folder.
+        st.session_state.file_path_for_processing = uploads_dir / f"{original_file_path.stem}.pdf"
+    else:
+        # Otherwise, the processed file is the original file itself.
+        st.session_state.file_path_for_processing = original_file_path
 def save_translation(document_id, lang_code, translated_text):
     """Saves a new translation for a specific document."""
     try:
@@ -354,8 +437,12 @@ if uploaded_file:
 
 if st.session_state.get("json_data"):
     st.divider()
-    tabs = st.tabs(["Formatted Content", "AI Summary", "Extracted Tables", "Structured Data", "Export & Translate", "Chat with Document", "Email Report"])
-
+    # In your `if st.session_state.get("json_data"):` block
+    tabs = st.tabs([
+        "Formatted Content", "AI Summary", "Extracted Tables", 
+        "Structured Data", "Embedded Content", "Export & Translate", # ✅ Added "Embedded Content"
+        "Chat with Document", "Email Report"
+    ])
     with tabs[0]:
         st.markdown(st.session_state.markdown_text, unsafe_allow_html=True)
 
@@ -416,8 +503,39 @@ if st.session_state.get("json_data"):
                     col.metric(label=label, value=value)
         with st.expander("Show Full JSON Structure"):
             st.json(st.session_state.json_data)
+    # Find the correct index for your new tab (e.g., tabs[4] in the example above)
+    with tabs[4]: # Make sure this is the correct index for your "Embedded Content" tab
+        st.subheader("Embedded Visual Content")
 
-    with tabs[4]:
+        # Call the extraction function (this part stays the same)
+        extracted_images = extract_and_crop_images(st.session_state.json_data, st.session_state.file_path_for_processing)
+
+        if not extracted_images:
+            st.info("No images, charts, or figures were found in this document.")
+        else:
+            st.success(f"Found {len(extracted_images)} visual element(s).")
+            
+            # ✅ Use an expander to hide the images by default
+            with st.expander(f"Click to view {len(extracted_images)} extracted image(s)"):
+                # The loop that displays the images now goes inside the expander
+                for i, (description, img) in enumerate(extracted_images):
+                    st.markdown("---")
+                    st.markdown(f"**Description:** *{description}*")
+                    st.image(img, use_container_width=True)
+
+                    # Create a download button for each image
+                    img_byte_arr = BytesIO()
+                    img.save(img_byte_arr, format='PNG')
+                    img_byte_arr = img_byte_arr.getvalue()
+
+                    st.download_button(
+                        label=f"Download Image {i+1}",
+                        data=img_byte_arr,
+                        file_name=f"{st.session_state.filename}_image_{i+1}.png",
+                        mime="image/png",
+                        key=f"download_img_{i}"
+                    )
+    with tabs[5]:
         st.subheader("Download & Translate")
         c1, c2 = st.columns(2)
         c1.download_button("Download Markdown (.md)", st.session_state.markdown_text, f"{st.session_state.filename}.md", "text/markdown", use_container_width=True, type="primary")
@@ -446,7 +564,7 @@ if st.session_state.get("json_data"):
                 except Exception as e:
                     st.error(f"Translation failed: {e}")
 
-    with tabs[5]:
+    with tabs[6]:
         st.subheader("Chat with Document")
         for msg in st.session_state.chat_history:
             st.chat_message(msg["role"]).write(msg["content"])
@@ -464,7 +582,7 @@ if st.session_state.get("json_data"):
                     except Exception as e:
                         st.error(f"Could not get answer: {e}")
 
-    with tabs[6]:
+    with tabs[7]:
         st.markdown("### Email Report")
         st.info("Compose your email and select attachments to send.")
         with st.form("email_form"):
@@ -509,13 +627,30 @@ if st.session_state.get("json_data"):
 # -----------------------------
 # SIDEBAR: Document History & DELETE LOGIC
 # -----------------------------
+# -----------------------------
+# SIDEBAR: Document History & DELETE LOGIC
+# -----------------------------
 if st.session_state.document_history:
     st.sidebar.divider()
     st.sidebar.subheader("Document History")
+
+    # ✅ --- 1. Add a search bar ---
+    search_query = st.sidebar.text_input("Search history...", key="history_search")
+
     sorted_history = sorted(st.session_state.document_history.items(), key=lambda item: item[1]['timestamp'], reverse=True)
+
+    # ✅ --- 2. Filter the history list based on the search query ---
+    if search_query:
+        sorted_history = [
+            (doc_name, data) for doc_name, data in sorted_history
+            if search_query.lower() in doc_name.lower()
+        ]
+
+    # ✅ --- 3. The loop now iterates over the (potentially filtered) list ---
     for doc_name, data in sorted_history:
         doc_to_delete = st.session_state.get('doc_to_delete')
         is_pending_delete = (doc_to_delete is not None) and (doc_to_delete['name'] == doc_name)
+
         with st.sidebar.expander(doc_name, expanded=is_pending_delete):
             if is_pending_delete:
                 st.warning("Are you sure?")

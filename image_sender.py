@@ -2,7 +2,7 @@
 from pathlib import Path
 import google.generativeai as genai  # ✅ Correct import
 
-API_KEY = "AIzaSyDMuSVQXOCDugx4C0hVYA2CN0yvV-h5OEQ"  # Replace with your actual API key
+API_KEY = "AIzaSyDcnChQSw0tvPtmmRBhsalV7SjPgfQ73dw"  # Replace with your actual API key
 MODEL_NAME = "gemini-1.5-flash"  # or gemini-1.5-pro-latest
 
 # ✅ Configure globally (only once per script)
@@ -63,7 +63,7 @@ Rules:
 - Each page must have page_index.
 - Each block has id, type, content, bbox, languages, overall_confidence.
 - Tables must be represented as {{ "headers": [...], "rows": [...] }}.
-- If a block has no text (e.g. picture), content = "" and languages = [].
+- If a block is an image, chart, or map, its "type" must be "image", and its "content" must be a short, descriptive string starting with "AN IMAGE OF ", followed by the description (e.g., "AN IMAGE OF the India map", "AN IMAGE OF a graph showing death rate from 2020 to 2025", "AN IMAGE OF Illustration of the Pentecost event, depicting the Holy Spirit descending as a dove and tongues of fire resting on the apostles."). Set "languages" to [].
 - Do not include any extra commentary, only valid JSON output.
 """
 
