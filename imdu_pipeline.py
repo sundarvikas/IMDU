@@ -8,6 +8,7 @@ from pdf_sender import pdf_sender
 from image_sender import image_sender
 from text_to_json import text_to_json
 from json_to_markdown import json_to_markdown
+from docx2pdf import convert
 
 # -----------------------------
 # CONFIGURATION
@@ -68,7 +69,6 @@ def process_document(
         elif ext in DOCX_EXTS:
             print("📄 Converting DOCX to PDF...")
             try:
-                from docx2pdf import convert
                 pdf_path = input_path.with_suffix(".pdf")
                 convert(str(input_path), str(pdf_path))
                 print(f"✅ Converted to: {pdf_path.name}")
