@@ -406,6 +406,12 @@ if uploaded_file:
                 except Exception as e:
                     st.error(f"Failed to convert DOCX file: {e}")
                     st.stop()
+        elif original_file_path.suffix.lower() in [".pdf", ".png", ".jpg", ".jpeg"]:
+            st.session_state.file_path_for_processing = original_file_path
+
+        else:
+            st.error("Unsupported file type.")
+            st.stop()
 
     file_path_for_processing = st.session_state.get('file_path_for_processing')
 
