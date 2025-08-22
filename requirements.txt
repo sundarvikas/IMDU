@@ -12,10 +12,12 @@ python-docx
 Pillow
 openpyxl
 camelot-py
-opencv-python-headless  # Dependency for Camelot
+opencv-python-headless 
+plotly # Dependency for Camelot
 
 # For Email Functionality
 # resend # Uncomment if your email_report.py uses this service
 
 # For local Windows development ONLY
 docx2pdf
+requests

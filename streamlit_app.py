@@ -8,7 +8,22 @@ from io import BytesIO
 import tempfile
 import fitz  # PyMuPDF
 from supabase import create_client, Client
-
+import re
+try:
+    from virustotal_service import VirusTotalService
+except ImportError:
+    st.error("virustotal_service.py not found. Link scanning is disabled.")
+    # Create a dummy class so the app doesn't crash
+    class VirusTotalService:
+        def analyze_url(self, url):
+            return {"error": "Service not available."}
+# Add this with your other imports at the top of the file
+try:
+    import pythoncom
+except ImportError:
+    # This will allow the app to run on non-Windows systems
+    # where pythoncom is not available.
+    pass
 # --- Import Custom Modules ---
 try:
     from email_report import send_report_email
@@ -156,7 +171,82 @@ def update_document_summary(doc_id, summary_text):
         supabase.table('documents').update({'ai_summary': summary_text}).eq('id', doc_id).execute()
     except Exception as e:
         st.error(f"Error updating summary: {e}")
+def get_language_stats(json_data: dict) -> dict:
+    """
+    Parses the document JSON and returns the percentage distribution of each language.
+    """
+    lang_counts = {}
+    LANG_CODE_TO_NAME = {
+        "en": "English", "hi": "Hindi", "es": "Spanish", "fr": "French",
+        "de": "German", "ar": "Arabic", "zh": "Chinese", "ja": "Japanese",
+        "ru": "Russian", "pt": "Portuguese", "ta": "Tamil", "te": "Telugu"
+    }
 
+    if not isinstance(json_data, dict):
+        return {}
+
+    try:
+        total_language_instances = 0
+        for page in json_data.get("document", {}).get("pages", []):
+            for block in page.get("blocks", []):
+                languages = block.get("languages", [])
+                for lang_code in languages:
+                    total_language_instances += 1
+                    lang_name = LANG_CODE_TO_NAME.get(lang_code, lang_code.upper())
+                    lang_counts[lang_name] = lang_counts.get(lang_name, 0) + 1
+        
+        if not total_language_instances:
+            return {}
+
+        # ✅ Correctly calculate percentages based on total instances
+        lang_percentages = {
+            lang: (count / total_language_instances) * 100
+            for lang, count in lang_counts.items()
+        }
+        return lang_percentages
+
+    except Exception as e:
+        st.warning(f"Could not parse language stats: {e}")
+        return {}
+import plotly.graph_objects as go
+
+
+def create_language_donut_chart(lang_data: dict):
+    """Creates a Plotly doughnut chart from language percentage data."""
+    if not lang_data:
+        return None
+    
+    labels = list(lang_data.keys())
+    values = list(lang_data.values())
+    
+    fig = go.Figure(data=[go.Pie(
+        labels=labels, 
+        values=values, 
+        hole=.5,
+    )])
+    
+    fig.update_traces(
+        # ✅ Use 'texttemplate' to add HTML bold tags to the percentage
+        textinfo='percent',
+        texttemplate='<b>%{percent}</b>', 
+        textfont_size=20,
+        marker=dict(colors=['#28a745', '#ffc107', '#17a2b8', '#007bff', '#ff4b4b'], line=dict(color='#262730', width=5))
+    )
+    
+    fig.update_layout(
+        showlegend=True,
+        margin=dict(l=40, r=40, t=40, b=40),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        # ✅ Add a font dictionary to the legend to increase its size
+        legend=dict(
+            font=dict(
+                size=16
+            )
+        )
+    )
+    
+    return fig
 def save_new_document(user_id, doc_name, json_data, markdown_text, ai_summary):
     """Saves a new document, including its summary, to the database."""
     try:
@@ -257,7 +347,7 @@ for key in keys_to_init:
 if "json_tables" not in st.session_state: st.session_state.json_tables = []
 if "document_history" not in st.session_state: st.session_state.document_history = {}
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
-
+if "link_analysis_results" not in st.session_state: st.session_state.link_analysis_results = [] # ✅ Add this line
 # -----------------------------
 # GEMINI SETUP
 # -----------------------------
@@ -303,9 +393,12 @@ if uploaded_file:
         
         # ✅ --- MODIFIED LOGIC: Using docx2pdf ---
         if original_file_path.suffix.lower() == ".docx":
-            st.warning("`.docx` processing uses `docx2pdf` and is only supported on Windows with Microsoft Word installed. This will fail on deployment.")
+            #st.warning("`.docx` processing uses `docx2pdf` and is only supported on Windows with Microsoft Word installed. This will fail on deployment.")
             with st.spinner("Converting DOCX to PDF..."):
                 try:
+                    # ✅ Add this line to initialize the COM library for this thread
+                    pythoncom.CoInitialize()
+                    
                     pdf_path = original_file_path.with_suffix(".pdf")
                     convert(str(original_file_path), str(pdf_path))
                     st.session_state.file_path_for_processing = pdf_path
@@ -313,8 +406,6 @@ if uploaded_file:
                 except Exception as e:
                     st.error(f"Failed to convert DOCX file: {e}")
                     st.stop()
-        else:
-            st.session_state.file_path_for_processing = original_file_path
 
     file_path_for_processing = st.session_state.get('file_path_for_processing')
 
@@ -349,14 +440,23 @@ if uploaded_file:
                         st.session_state.update(
                             json_data=json_data, markdown_text=markdown_text, filename=stem,
                             json_tables=find_tables_in_json(json_data), ai_summary=summary,
-                            chat_history=[], current_doc_key=doc_key
+                            chat_history=[], current_doc_key=doc_key, link_analysis_results=[] # ✅ Reset link analysis results
                         )
                         st.session_state.document_history[doc_key] = {
                             "db_id": new_doc_record['id'], "json_data": new_doc_record['original_json'],
                             "markdown_text": new_doc_record['original_md'], "ai_summary": new_doc_record['ai_summary'],
                             "timestamp": new_doc_record['created_at'], "translations": {}
                         }
+                        
+                        links = list(set(re.findall(r'https?://[^\s)\]]+', markdown_text))) # Find unique links
+                        if links:
+                            with st.spinner(f"Found {len(links)} links. Verifying with VirusTotal..."):
+                                vt_service = VirusTotalService()
+                                analysis_results = [vt_service.analyze_url(link) for link in links]
+                                st.session_state.link_analysis_results = analysis_results
+                                st.toast("Link verification complete!", icon="🔗")
                         st.toast("Document processed and saved!", icon="✅")
+                        st.rerun()
                 except Exception as e:
                     st.error(f"A critical error occurred: {str(e)}")
                     st.stop()
@@ -364,7 +464,7 @@ if uploaded_file:
 
 if st.session_state.get("json_data"):
     st.divider()
-    tabs = st.tabs(["Formatted Content", "AI Summary", "Extracted Tables", "Structured Data", "Export & Translate", "Chat with Document", "Email Report"])
+    tabs = st.tabs(["Formatted Content", "AI Summary", "Extracted Tables", "Structured Data","Extracted Links", "Export & Translate", "Chat with Document", "Email Report"])
 
     with tabs[0]:
         st.markdown(st.session_state.markdown_text, unsafe_allow_html=True)
@@ -424,10 +524,68 @@ if st.session_state.get("json_data"):
                 if (i + j) < len(items):
                     label, value = items[i+j]
                     col.metric(label=label, value=value)
+        
         with st.expander("Show Full JSON Structure"):
             st.json(st.session_state.json_data)
 
-    with tabs[4]:
+        # --- ✅ MODIFIED LANGUAGE SECTION ---
+        st.divider()
+        st.subheader("Language Distribution")
+        
+        # Get the corrected percentages
+        language_percentages = get_language_stats(st.session_state.json_data)
+        
+        if not language_percentages:
+            st.info("No specific language data was detected in the document.")
+        else:
+            # Create and display the doughnut chart
+            lang_chart = create_language_donut_chart(language_percentages)
+            st.plotly_chart(lang_chart, use_container_width=True)
+    with tabs[4]: # Corresponds to "Extracted Links"
+        st.subheader("Link Safety Verification")
+        results = st.session_state.get("link_analysis_results")
+
+        if not results:
+            st.info("No links were found in this document.")
+        else:
+            # First, check for a global service error (e.g., missing API keys)
+            # This is identified by a result dictionary that has an 'error' but no 'url'
+            if results and 'error' in results[0] and 'url' not in results[0]:
+                st.error(f"Could not perform link analysis. Please check your configuration. \n\n*Details:* {results[0]['error']}")
+            else:
+                st.markdown(f"Found and analyzed *{len(results)}* unique links.")
+                for res in results:
+                    st.divider()
+                    
+                    # Safely get the URL to prevent the KeyError
+                    url = res.get('url', 'URL not available')
+                    st.markdown(f"*URL:* {url}")
+
+                    # Check the status of the analysis for this specific URL
+                    if res.get("status") == "Completed":
+                        stats = res.get("stats", {})
+                        malicious = stats.get("malicious", 0)
+                        suspicious = stats.get("suspicious", 0)
+
+                        if malicious > 0:
+                            st.error("*Status: Malicious* 🔴")
+                        elif suspicious > 0:
+                            st.warning("*Status: Suspicious* 🟡")
+                        else:
+                            st.success("*Status: Safe* 🟢")
+
+                        with st.expander("Show VirusTotal Analysis Details"):
+                            c1, c2, c3, c4 = st.columns(4)
+                            c1.metric("Harmless", stats.get("harmless", 0))
+                            c2.metric("Malicious", malicious)
+                            c3.metric("Suspicious", suspicious)
+                            c4.metric("Undetected", stats.get("undetected", 0))
+                            st.link_button("View Full Report on VirusTotal", res.get("report_link", "#"))
+                    else:
+                        # Display the specific error or status for this URL
+                        error_message = res.get('error', 'An unknown issue occurred.')
+                        st.caption(f"Analysis Status: {res.get('status', 'Unknown')} - {error_message}")
+    with tabs[5]:
         st.subheader("Download & Translate")
         c1, c2 = st.columns(2)
         c1.download_button("Download Markdown (.md)", st.session_state.markdown_text, f"{st.session_state.filename}.md", "text/markdown", use_container_width=True, type="primary")
@@ -456,7 +614,7 @@ if st.session_state.get("json_data"):
                 except Exception as e:
                     st.error(f"Translation failed: {e}")
 
-    with tabs[5]:
+    with tabs[6]:
         st.subheader("Chat with Document")
         for msg in st.session_state.chat_history:
             st.chat_message(msg["role"]).write(msg["content"])
@@ -474,7 +632,7 @@ if st.session_state.get("json_data"):
                     except Exception as e:
                         st.error(f"Could not get answer: {e}")
 
-    with tabs[6]:
+    with tabs[7]:
         st.markdown("### Email Report")
         st.info("Compose your email and select attachments to send.")
         with st.form("email_form"):
