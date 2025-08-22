@@ -78,11 +78,18 @@ def auth_ui():
     """Handles session restoration and the user authentication UI."""
     if 'user' not in st.session_state:
         st.session_state.user = None
+    
     if st.session_state.user is None:
-        session = supabase.auth.get_session()
-        if session and not isinstance(session, bool):
-            st.session_state.user = session.user
+        # ✅ Wrap the session check in a try...except block to gracefully handle errors
+        try:
+            session = supabase.auth.get_session()
+            if session and not isinstance(session, bool):
+                st.session_state.user = session.user
+        except Exception:
+            # If get_session fails (e.g., invalid refresh token), treat user as logged out
+            st.session_state.user = None
 
+    # --- UI Rendering ---
     if st.session_state.user is None:
         st.title("IMDU Document Parser")
         st.sidebar.subheader("Login / Sign Up")
@@ -99,10 +106,11 @@ def auth_ui():
                         st.rerun()
                     except Exception:
                         st.sidebar.error("Login failed: Incorrect email or password.")
+
         elif auth_option == "Sign Up":
             with st.sidebar.form("signup_form"):
-                username = st.text_input("Username")
                 email = st.text_input("Email")
+                username = st.text_input("Username")
                 password = st.text_input("Password", type="password")
                 if st.form_submit_button("Sign Up", type="primary", use_container_width=True):
                     if not username:
@@ -118,6 +126,7 @@ def auth_ui():
                                 st.rerun()
                         except Exception as e:
                             st.sidebar.error(f"Sign up failed: {e}")
+
         elif auth_option == "Forgot Password":
             with st.sidebar.form("reset_password_form"):
                 email = st.text_input("Enter your email address")
@@ -128,18 +137,85 @@ def auth_ui():
                     except Exception as e:
                         st.sidebar.error(f"Failed to send reset link: {e}")
         return None
-    else:
+        
+    else: # If user is logged in
         user = st.session_state.user
         st.sidebar.subheader("Welcome")
         display_name = user.user_metadata.get("username", user.email)
         st.sidebar.markdown(f"**{display_name.upper()}**")
+        
         if st.sidebar.button("Logout", use_container_width=True):
             supabase.auth.sign_out()
             for key in st.session_state.keys():
                 del st.session_state[key]
             st.rerun()
         return user
+import plotly.graph_objects as go # Make sure this is imported at the top
 
+def extract_chart_data(blocks: list) -> list:
+    """
+    Recursively finds and returns all chart data blocks from a list of blocks,
+    searching inside image_containers.
+    """
+    charts = []
+    # This loop correctly iterates over a list of block DICTIONARIES
+    for block in blocks:
+        btype = block.get("type", "").lower()
+        content = block.get("content", {})
+
+        # If the block itself is a chart, add it to our list
+        if btype in ["pie_chart", "bar_chart", "line_graph"]:
+            charts.append(block)
+        # If the block is a container, search for charts inside it
+        elif btype == "image_container" and isinstance(content, dict):
+            nested_charts = extract_chart_data(content.get("blocks", []))
+            charts.extend(nested_charts)
+
+    return charts
+
+def render_chart(chart_block: dict, theme="dark"):
+    """Takes a chart block and returns a Plotly figure with a specified theme."""
+    chart_type = chart_block.get("type")
+    content = chart_block.get("content", {})
+    
+    title = content.get("title", "Chart")
+    labels = content.get("labels", [])
+    data = content.get("data", [])
+    
+    # ✅ 1. Define a consistent color palette for all charts
+    color_palette = ['#007bff', '#ff4b4b', '#28a745', '#ffc107', '#17a2b8', '#6f42c1']
+
+    fig = None
+    if chart_type == "pie_chart":
+        fig = go.Figure(data=[go.Pie(labels=labels, values=data, hole=.4, marker=dict(colors=color_palette))])
+    
+    elif chart_type == "bar_chart":
+        # ✅ 2. Apply the color palette to the bar chart
+        fig = go.Figure(data=[go.Bar(x=labels, y=data, marker=dict(color=color_palette))])
+        
+    elif chart_type == "line_graph":
+        # ✅ 3. Apply the palette to the line chart's markers
+        fig = go.Figure(data=[go.Scatter(
+            x=labels, 
+            y=data, 
+            mode='lines+markers',
+            marker=dict(color=color_palette, size=10),
+            line=dict(color=color_palette[0]) # Use the first color for the line itself
+        )])
+        
+    if fig:
+        # Apply the correct theme for in-app display or email export
+        if theme == 'light':
+            fig.update_layout(title_text=title, template="plotly_white")
+        else:
+            fig.update_layout(
+                title_text=title, 
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)',
+                font_color="white"
+            )
+        return fig
+    return None
 def load_user_documents(user_id):
     """Loads all documents for a user in an optimized way (2 queries)."""
     history_dict = {}
@@ -489,7 +565,7 @@ if st.session_state.get("json_data"):
             st.warning(f"**Security Warning:** Found {suspicious_count} suspicious link(s). Please review them carefully in the 'Extracted Links' tab.", icon="⚠️")
         else:
             st.success(f"**Security Check:** All {len(link_results)} links found in this document appear to be safe.", icon="✅")
-    tabs = st.tabs(["Formatted Content", "AI Summary", "Extracted Tables", "Structured Data","Extracted Links", "Export & Translate", "Chat with Document", "Email Report"])
+    tabs = st.tabs(["Formatted Content", "AI Summary", "Extracted Tables", "Charts & Graphs", "Structured Data","Extracted Links", "Export & Translate", "Chat with Document", "Email Report"])
 
     with tabs[0]:
         st.markdown(st.session_state.markdown_text, unsafe_allow_html=True)
@@ -539,7 +615,56 @@ if st.session_state.get("json_data"):
         else:
             st.info("No tables were found in the document.")
 
-    with tabs[3]:
+    # Assuming this is tabs[3]
+    with tabs[3]: 
+        st.subheader("Recreated Charts & Graphs")
+        
+        # First, get all top-level blocks from all pages
+        all_blocks = [
+            block for page in st.session_state.json_data.get("document", {}).get("pages", [])
+            for block in page.get("blocks", [])
+        ]
+        
+        # Call the recursive function to find all charts
+        chart_blocks = extract_chart_data(all_blocks)
+        
+        if not chart_blocks:
+            st.info("No structured chart data was extracted from this document.")
+        else:
+            st.success(f"Successfully extracted and recreated {len(chart_blocks)} chart(s).")
+            for i, chart_block in enumerate(chart_blocks):
+                # Render the dark-themed chart for in-app display
+                fig_dark = render_chart(chart_block, theme='dark')
+                
+                if fig_dark:
+                    st.plotly_chart(fig_dark, use_container_width=True)
+
+                    # --- ✅ NEW DOWNLOAD LOGIC ---
+                    # 1. Render a light-themed version for the download
+                    fig_light = render_chart(chart_block, theme='light')
+                    img_bytes = fig_light.to_image(format="jpg")
+                    
+                    # 1. Safely get the chart title from the JSON content
+                    chart_title = chart_block.get('content', {}).get('title')
+                    
+                    # 2. Provide a default if the title is missing or empty
+                    if not chart_title:
+                        chart_title = f"chart_{i+1}"
+                    
+                    # 3. Create the filename using the safe title
+                    file_name = f"{chart_title.replace(' ', '_')}.jpg"
+
+                    st.download_button(
+                        label="📷 Download as JPG",
+                        data=img_bytes,
+                        file_name=file_name,
+                        mime="image/jpeg",
+                        key=f"download_chart_{i}"
+                    )
+                    # --- END OF NEW LOGIC ---
+                    
+                st.divider()
+    with tabs[4]:
         st.subheader("Document Structure Overview")
         stats = get_summary_stats(st.session_state.json_data)
         items = list(stats.items())
@@ -566,7 +691,7 @@ if st.session_state.get("json_data"):
             # Create and display the doughnut chart
             lang_chart = create_language_donut_chart(language_percentages)
             st.plotly_chart(lang_chart, use_container_width=True)
-    with tabs[4]: # Corresponds to "Extracted Links"
+    with tabs[5]: # Corresponds to "Extracted Links"
         st.subheader("Link Safety Verification")
         results = st.session_state.get("link_analysis_results")
 
@@ -610,7 +735,7 @@ if st.session_state.get("json_data"):
                         # Display the specific error or status for this URL
                         error_message = res.get('error', 'An unknown issue occurred.')
                         st.caption(f"Analysis Status: {res.get('status', 'Unknown')} - {error_message}")
-    with tabs[5]:
+    with tabs[6]:
         st.subheader("Download & Translate")
         c1, c2 = st.columns(2)
         c1.download_button("Download Markdown (.md)", st.session_state.markdown_text, f"{st.session_state.filename}.md", "text/markdown", use_container_width=True, type="primary")
@@ -639,7 +764,7 @@ if st.session_state.get("json_data"):
                 except Exception as e:
                     st.error(f"Translation failed: {e}")
 
-    with tabs[6]:
+    with tabs[7]:
         st.subheader("Chat with Document")
         for msg in st.session_state.chat_history:
             st.chat_message(msg["role"]).write(msg["content"])
@@ -657,19 +782,39 @@ if st.session_state.get("json_data"):
                     except Exception as e:
                         st.error(f"Could not get answer: {e}")
 
-    with tabs[7]:
+    # Assuming this is the last tab, e.g., tabs[8]
+    with tabs[8]:
         st.markdown("### Email Report")
         st.info("Compose your email and select attachments to send.")
+        
         with st.form("email_form"):
             recipient = st.text_input("Recipient's Email", placeholder="name@example.com")
             subject = st.text_input("Subject", value=f"Document Analysis: {st.session_state.filename}")
+            
             st.markdown("**Select content to include:**")
             include_summary = st.checkbox("Include AI Summary (in email body)", value=False)
             attach_md = st.checkbox("Attach Markdown File (.md)", value=False)
             attach_json = st.checkbox("Attach JSON File (.json)", value=False)
+            
             attach_tables = st.checkbox("Attach Extracted Tables (.xlsx)") if st.session_state.json_tables else False
+            
+            # --- ✅ CORRECTED LOGIC HERE ---
+            # 1. First, get all top-level blocks from the main JSON data.
+            chart_blocks = []
+            if st.session_state.json_data:
+                all_blocks = [
+                    block for page in st.session_state.json_data.get("document", {}).get("pages", [])
+                    for block in page.get("blocks", [])
+                ]
+                # 2. Now, call the recursive function on the list of blocks.
+                chart_blocks = extract_chart_data(all_blocks)
+
+            attach_charts = st.checkbox("Attach Recreated Charts (.jpg)") if chart_blocks else False
+            # --- END OF CORRECTION ---
+
             custom_message = st.text_area("Custom Message (Optional)", placeholder="Add a personal note here...")
             submitted = st.form_submit_button("✉️ Send Email", use_container_width=True)
+
             if submitted:
                 if not recipient:
                     st.warning("Please enter a recipient's email address.")
@@ -677,8 +822,11 @@ if st.session_state.get("json_data"):
                     with st.spinner("Preparing and sending your email..."):
                         attachment_paths, summary_text = [], ""
                         if include_summary: summary_text = st.session_state.ai_summary
+                        
                         with tempfile.TemporaryDirectory() as temp_dir:
                             temp_path = Path(temp_dir)
+                            
+                            # --- (Existing attachment logic for md, json, tables) ---
                             if attach_md:
                                 md_path = temp_path / f"{st.session_state.filename}.md"
                                 md_path.write_text(st.session_state.markdown_text, encoding='utf-8')
@@ -692,6 +840,20 @@ if st.session_state.get("json_data"):
                                 excel_data = to_excel(st.session_state.json_tables)
                                 excel_path.write_bytes(excel_data)
                                 attachment_paths.append(str(excel_path))
+
+                            # ✅ --- 2. Add logic to generate and attach charts ---
+                            if attach_charts and chart_blocks:
+                                for i, chart_block in enumerate(chart_blocks):
+                                    # Tell the function to render the chart with a light theme for the email
+                                    fig = render_chart(chart_block, theme='light')
+                                    if fig:
+                                        chart_filename = f"{st.session_state.filename}_chart_{i+1}.jpg"
+                                        chart_path = temp_path / chart_filename
+                                        # Save the light-themed image
+                                        fig.write_image(str(chart_path))
+                                        attachment_paths.append(str(chart_path))
+
+                            # --- Call the email function with all attachments ---
                             success, message = send_report_email(
                                 recipient=recipient, subject=subject, custom_message=custom_message,
                                 summary_text=summary_text, attachment_paths=attachment_paths
