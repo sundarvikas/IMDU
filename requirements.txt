@@ -21,4 +21,3 @@ plotly # Dependency for Camelot
 # For local Windows development ONLY
 docx2pdf
 requests
-pythoncom
