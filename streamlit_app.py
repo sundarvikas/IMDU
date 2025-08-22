@@ -470,6 +470,25 @@ if uploaded_file:
 
 if st.session_state.get("json_data"):
     st.divider()
+    link_results = st.session_state.get("link_analysis_results")
+    if link_results:
+        malicious_count = 0
+        suspicious_count = 0
+
+        # Tally the results from the analysis
+        for res in link_results:
+            if res.get("status") == "Completed":
+                stats = res.get("stats", {})
+                malicious_count += stats.get("malicious", 0)
+                suspicious_count += stats.get("suspicious", 0)
+        
+        # Display a prominent alert based on the findings
+        if malicious_count > 0:
+            st.error(f"**Security Alert:** Found {malicious_count} potentially malicious link(s) in this document. Please review them in the 'Extracted Links' tab before clicking.", icon="🚨")
+        elif suspicious_count > 0:
+            st.warning(f"**Security Warning:** Found {suspicious_count} suspicious link(s). Please review them carefully in the 'Extracted Links' tab.", icon="⚠️")
+        else:
+            st.success(f"**Security Check:** All {len(link_results)} links found in this document appear to be safe.", icon="✅")
     tabs = st.tabs(["Formatted Content", "AI Summary", "Extracted Tables", "Structured Data","Extracted Links", "Export & Translate", "Chat with Document", "Email Report"])
 
     with tabs[0]:

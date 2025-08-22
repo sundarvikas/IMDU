@@ -1,0 +1,124 @@
+{
+  "document": {
+    "doc-name": "Document 7-2.pdf",
+    "pages": [
+      {
+        "page_index": 1,
+        "blocks": [
+          {
+            "id": "b1",
+            "type": "title",
+            "content": "The Importance of Reading",
+            "bbox": [
+              0,
+              0,
+              0.2,
+              0.1
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          },
+          {
+            "id": "b2",
+            "type": "paragraph",
+            "content": "Reading is one of the most valuable skills a person can develop. It not only helps in gaining knowledge but also improves focus, imagination, and communication skills. Books, articles, and even short stories provide endless opportunities to learn and grow.",
+            "bbox": [
+              0.1,
+              0.1,
+              0.8,
+              0.2
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          },
+          {
+            "id": "b3",
+            "type": "table",
+            "content": {
+              "headers": [
+                "Benefit",
+                "Description"
+              ],
+              "rows": [
+                [
+                  "Improves Vocabulary",
+                  "Expands word knowledge and language use"
+                ],
+                [
+                  "Boosts Creativity",
+                  "Encourages imagination and innovative thinking"
+                ],
+                [
+                  "Reduces Stress",
+                  "Provides relaxation and mental escape"
+                ]
+              ]
+            },
+            "bbox": [
+              0.2,
+              0.2,
+              0.5,
+              0.4
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.9
+          },
+          {
+            "id": "b4",
+            "type": "image",
+            "content": "AN IMAGE OF a flowchart describing React component structure and implementation",
+            "bbox": [
+              0.5,
+              0.4,
+              0.8,
+              0.7
+            ],
+            "languages": [],
+            "overall_confidence": 0.8
+          },
+          {
+            "id": "b5",
+            "type": "list",
+            "content": "https://httpbin.org\nhttp://malware-test-site.fake\nhttps://www.movierulzcom.cyou/\nhttps://sport.netbet.com/in/",
+            "bbox": [
+              0.8,
+              0.7,
+              0.95,
+              0.9
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.9
+          }
+        ]
+      },
+      {
+        "page_index": 2,
+        "blocks": [
+          {
+            "id": "b6",
+            "type": "list",
+            "content": "https://www.geeksforgeeks.org/",
+            "bbox": [
+              0.1,
+              0.1,
+              0.2,
+              0.2
+            ],
+            "languages": [
+              "en"
+            ],
+            "overall_confidence": 0.95
+          }
+        ]
+      }
+    ]
+  }
+}
