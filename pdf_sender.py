@@ -4,7 +4,7 @@ import google.generativeai as genai
 # -----------------------------
 # CONFIG
 # -----------------------------
-API_KEY = "AIzaSyDqoS0L2DJ2IaKmJdC-BopHUDK-srerWzo"   # Replace with your actual API key
+API_KEY = "AIzaSyCPksKa-eqaDHK6dMRVIeJMxUwhcbalw3U"   # Replace with your actual API key
 MODEL_NAME = "gemini-1.5-flash"  # or gemini-1.5-pro-latest
 
 # Initialize the API (don't assign the result!)

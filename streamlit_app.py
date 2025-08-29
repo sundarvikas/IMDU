@@ -742,7 +742,7 @@ if st.session_state.get("json_data"):
         c2.download_button("Download JSON (.json)", json.dumps(st.session_state.json_data, indent=2), f"{st.session_state.filename}.json", "application/json", use_container_width=True, type="primary")
         st.divider()
         st.subheader("Translate Document")
-        lang_map = {"Hindi": "hi", "Tamil": "ta", "Telugu": "te", "French": "fr", "Spanish": "es", "German": "de"}
+        lang_map = {"Hindi": "hi", "Tamil": "ta", "Telugu": "te", "French": "fr", "Spanish": "es", "German": "de","English":"en"}
         target_lang_name = st.selectbox("Select language", lang_map.keys())
         if st.button(f"Translate to {target_lang_name}", use_container_width=True):
             with st.spinner(f"Translating..."):
