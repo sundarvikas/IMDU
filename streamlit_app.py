@@ -641,28 +641,36 @@ if st.session_state.get("json_data"):
                 if fig_dark:
                     st.plotly_chart(fig_dark, use_container_width=True)
 
-                    # --- ✅ NEW DOWNLOAD LOGIC ---
+                    # --- ✅ DOWNLOAD LOGIC WITH SAFE FALLBACK ---
                     # 1. Render a light-themed version for the download
                     fig_light = render_chart(chart_block, theme='light')
-                    img_bytes = fig_light.to_image(format="jpg")
-                    
-                    # 1. Safely get the chart title from the JSON content
-                    chart_title = chart_block.get('content', {}).get('title')
-                    
-                    # 2. Provide a default if the title is missing or empty
-                    if not chart_title:
-                        chart_title = f"chart_{i+1}"
-                    
-                    # 3. Create the filename using the safe title
-                    file_name = f"{chart_title.replace(' ', '_')}.jpg"
+                    img_bytes = None
+                    if fig_light:
+                        try:
+                            img_bytes = fig_light.to_image(format="jpg")
+                        except Exception:
+                            # On some managed platforms (e.g. Streamlit Cloud),
+                            # Plotly static image export may not be supported.
+                            st.info("Static chart image download is not available in this environment.")
 
-                    st.download_button(
-                        label="📷 Download as JPG",
-                        data=img_bytes,
-                        file_name=file_name,
-                        mime="image/jpeg",
-                        key=f"download_chart_{i}"
-                    )
+                    if img_bytes:
+                        # 1. Safely get the chart title from the JSON content
+                        chart_title = chart_block.get('content', {}).get('title')
+                        
+                        # 2. Provide a default if the title is missing or empty
+                        if not chart_title:
+                            chart_title = f"chart_{i+1}"
+                        
+                        # 3. Create the filename using the safe title
+                        file_name = f"{chart_title.replace(' ', '_')}.jpg"
+
+                        st.download_button(
+                            label="📷 Download as JPG",
+                            data=img_bytes,
+                            file_name=file_name,
+                            mime="image/jpeg",
+                            key=f"download_chart_{i}"
+                        )
                     # --- END OF NEW LOGIC ---
                     
                 st.divider()
@@ -851,9 +859,12 @@ if st.session_state.get("json_data"):
                                     if fig:
                                         chart_filename = f"{st.session_state.filename}_chart_{i+1}.jpg"
                                         chart_path = temp_path / chart_filename
-                                        # Save the light-themed image
-                                        fig.write_image(str(chart_path))
-                                        attachment_paths.append(str(chart_path))
+                                        # Save the light-themed image (may not be supported on all platforms)
+                                        try:
+                                            fig.write_image(str(chart_path))
+                                            attachment_paths.append(str(chart_path))
+                                        except Exception:
+                                            st.info("Chart images could not be attached because static image export is not supported in this environment.")
 
                             # --- Call the email function with all attachments ---
                             success, message = send_report_email(
