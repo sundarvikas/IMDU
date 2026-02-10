@@ -508,7 +508,8 @@ if uploaded_file:
                     json_data, markdown_text = process_document(file_path=str(file_path_for_processing))
                     summary = ""
                     try:
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        # Switched to a newer Flash model to avoid 404 for gemini-1.5-flash
+                        model = genai.GenerativeModel('gemini-2.5-flash')
                         response = model.generate_content(f"Provide a concise summary of the document:\n\n{markdown_text}")
                         summary = response.text
                         st.toast("AI summary generated!", icon="🧠")
@@ -584,7 +585,8 @@ if st.session_state.get("json_data"):
                     if not doc_db_id:
                         st.error("Could not find the document ID to save the summary.")
                     else:
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        # Use the same Flash model consistently
+                        model = genai.GenerativeModel('gemini-2.5-flash')
                         response = model.generate_content(f"Provide a concise, professional summary...\n\n{st.session_state.markdown_text}")
                         new_summary = response.text
                         update_document_summary(doc_db_id, new_summary)
@@ -747,7 +749,7 @@ if st.session_state.get("json_data"):
         if st.button(f"Translate to {target_lang_name}", use_container_width=True):
             with st.spinner(f"Translating..."):
                 try:
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-2.5-flash')
                     lang_code = lang_map[target_lang_name]
                     prompt = f"Translate the following text into {target_lang_name}. Preserve markdown.\n\n{st.session_state.markdown_text}"
                     response = model.generate_content(prompt)
@@ -774,7 +776,7 @@ if st.session_state.get("json_data"):
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
                     try:
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        model = genai.GenerativeModel('gemini-2.5-flash')
                         response = model.generate_content(f"Based on this document:\n{st.session_state.markdown_text}\n\nAnswer this question: {prompt}")
                         answer = response.text
                         st.write(answer)

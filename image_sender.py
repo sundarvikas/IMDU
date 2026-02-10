@@ -2,8 +2,8 @@
 from pathlib import Path
 import google.generativeai as genai  # ✅ Correct import
 
-API_KEY = "AIzaSyCPksKa-eqaDHK6dMRVIeJMxUwhcbalw3U"  # Replace with your actual API key
-MODEL_NAME = "gemini-1.5-flash"  # or gemini-1.5-pro-latest
+API_KEY = "AIzaSyAUvVdNfaACOnmZQpySjy38bVNV-jJ-XPo"  # Replace with your actual API key
+MODEL_NAME = "gemini-2.5-flash"  # or gemini-1.5-pro-latest
 
 # ✅ Configure globally (only once per script)
 genai.configure(api_key=API_KEY)
